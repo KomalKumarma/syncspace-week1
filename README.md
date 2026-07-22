@@ -47,6 +47,17 @@ http://localhost:5173
 
 To test rooms, open the app in two browser tabs. Use the same room name in both tabs and join. You should see the connected user count and activity messages update in real time.
 
+## Week 1 Room Test
+
+Use this quick test before every review push:
+
+1. Start the app with `npm.cmd run dev`.
+2. Open `http://localhost:5173` in two browser tabs.
+3. Enter the same room name in both tabs.
+4. Click **Join** in both tabs.
+5. Confirm the collaborator count and room activity update.
+6. Send a room chat message and confirm it appears in the other tab.
+
 ## Project Structure
 
 ```text
