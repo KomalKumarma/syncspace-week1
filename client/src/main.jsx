@@ -5,6 +5,7 @@ import {
   Braces,
   Circle,
   Code2,
+  LogOut,
   LogIn,
   MessageSquare,
   MousePointer2,
@@ -92,6 +93,13 @@ function App() {
     setMessageText('');
   }
 
+  function leaveRoom() {
+    socket.emit('leave-room');
+    setJoinedRoom('');
+    setUsers([]);
+    setMessages([]);
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -132,6 +140,13 @@ function App() {
           <strong>{users.length}</strong>
           <span>{joinedRoom || 'No room joined'}</span>
         </div>
+
+        {joinedRoom && (
+          <button className="leave-button" type="button" onClick={leaveRoom}>
+            <LogOut size={18} />
+            Leave
+          </button>
+        )}
       </section>
 
       <section className="workspace">
@@ -257,4 +272,3 @@ function CodePanel() {
 }
 
 createRoot(document.getElementById('root')).render(<App />);
-

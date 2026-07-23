@@ -152,11 +152,16 @@ input {
 }
 
 .join-form button,
-.message-form button {
+.message-form button,
+.leave-button {
   background: #176b87;
   color: #ffffff;
   min-height: 40px;
   padding: 0 14px;
+}
+
+.leave-button {
+  background: #8a3b2d;
 }
 
 .workspace {
