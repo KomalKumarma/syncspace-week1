@@ -1,16 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
 import {
   Braces,
-  Circle,
   Code2,
+  Eraser,
   LogOut,
   LogIn,
   MessageSquare,
-  MousePointer2,
-  PenLine,
-  RectangleHorizontal,
   Users,
   Wifi,
   WifiOff
@@ -211,28 +208,153 @@ function App() {
 }
 
 function WhiteboardPanel() {
+  const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const contextRef = useRef(null);
+  const isDrawingRef = useRef(false);
+  const dimensionsRef = useRef({ width: 0, height: 0 });
+
+  const [color, setColor] = useState('#176b87');
+  const [brushSize, setBrushSize] = useState(4);
+
+  const resizeCanvas = useCallback(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    const { width, height } = container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    dimensionsRef.current = { width, height };
+
+    const context = canvas.getContext('2d');
+    context.scale(dpr, dpr);
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    contextRef.current = context;
+  }, []);
+
+  useEffect(() => {
+    resizeCanvas();
+
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return undefined;
+
+    const resizeObserver = new ResizeObserver(() => {
+      resizeCanvas();
+    });
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, [resizeCanvas]);
+
+  function getPointerPosition(event) {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+  }
+
+  function handlePointerDown(event) {
+    const canvas = canvasRef.current;
+    const context = contextRef.current;
+    if (!canvas || !context) return;
+
+    canvas.setPointerCapture(event.pointerId);
+    isDrawingRef.current = true;
+
+    const { x, y } = getPointerPosition(event);
+    context.strokeStyle = color;
+    context.lineWidth = brushSize;
+    context.beginPath();
+    context.moveTo(x, y);
+    // Draw a dot for single clicks/taps.
+    context.lineTo(x, y);
+    context.stroke();
+  }
+
+  function handlePointerMove(event) {
+    if (!isDrawingRef.current) return;
+    const context = contextRef.current;
+    if (!context) return;
+
+    const { x, y } = getPointerPosition(event);
+    context.strokeStyle = color;
+    context.lineWidth = brushSize;
+    context.lineTo(x, y);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x, y);
+  }
+
+  function handlePointerUp(event) {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    const canvas = canvasRef.current;
+    if (canvas && canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function clearCanvas() {
+    const context = contextRef.current;
+    if (!context) return;
+    const { width, height } = dimensionsRef.current;
+    context.clearRect(0, 0, width, height);
+  }
+
   return (
     <section className="pane">
       <div className="pane-header">
         <div>
           <h2>Whiteboard</h2>
-          <p>Canvas scaffold for Week 1</p>
+          <p>Freehand canvas for Week 1</p>
         </div>
-        <div className="tool-group" aria-label="Whiteboard tools">
-          <button title="Select" type="button"><MousePointer2 size={18} /></button>
-          <button title="Pen" type="button"><PenLine size={18} /></button>
-          <button title="Rectangle" type="button"><RectangleHorizontal size={18} /></button>
-          <button title="Circle" type="button"><Circle size={18} /></button>
+        <div className="whiteboard-controls" aria-label="Whiteboard tools">
+          <label className="control-color" title="Brush color">
+            <input
+              type="color"
+              value={color}
+              onChange={(event) => setColor(event.target.value)}
+              aria-label="Brush color"
+            />
+          </label>
+          <label className="control-range" title="Brush size">
+            <span>Size</span>
+            <input
+              type="range"
+              min="1"
+              max="40"
+              value={brushSize}
+              onChange={(event) => setBrushSize(Number(event.target.value))}
+              aria-label="Brush size"
+            />
+            <span className="control-range-value">{brushSize}px</span>
+          </label>
+          <button type="button" className="clear-button" onClick={clearCanvas}>
+            <Eraser size={16} />
+            Clear
+          </button>
         </div>
       </div>
 
-      <div className="whiteboard-stage">
-        <div className="canvas-grid">
-          <div className="shape rectangle" />
-          <div className="shape line" />
-          <div className="shape circle" />
-          <div className="label-chip">Architecture sketch area</div>
-        </div>
+      <div className="whiteboard-stage" ref={containerRef}>
+        <canvas
+          ref={canvasRef}
+          className="whiteboard-canvas"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        />
       </div>
     </section>
   );

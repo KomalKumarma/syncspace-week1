@@ -184,28 +184,89 @@ input {
   align-items: center;
   border-bottom: 1px solid #d9e2ea;
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
   padding: 14px;
 }
 
-.tool-group {
+/* Whiteboard controls */
+
+.whiteboard-controls {
+  align-items: center;
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.tool-group button {
+.control-color {
+  align-items: center;
+  background: #edf1f5;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 0;
+  height: 36px;
+  overflow: hidden;
+  padding: 0;
+  width: 36px;
+}
+
+.control-color input[type='color'] {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  height: 44px;
+  min-height: 0;
+  padding: 0;
+  width: 44px;
+}
+
+.control-range {
+  align-items: center;
+  background: #edf1f5;
+  border-radius: 999px;
+  color: #4f5f70;
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+}
+
+.control-range input[type='range'] {
+  accent-color: #176b87;
+  cursor: pointer;
+  height: auto;
+  min-height: 0;
+  width: 100px;
+}
+
+.control-range-value {
+  color: #34475a;
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+}
+
+.clear-button {
   background: #edf1f5;
   color: #34475a;
   height: 36px;
-  width: 36px;
+  padding: 0 12px;
+}
+
+.clear-button:hover {
+  background: #e3e9ee;
 }
 
 .whiteboard-stage {
   background: #f8fafc;
+  min-height: 0;
+  overflow: hidden;
   padding: 14px;
+  position: relative;
 }
 
-.canvas-grid {
+.whiteboard-canvas {
   background-color: #ffffff;
   background-image:
     linear-gradient(#e5ebf0 1px, transparent 1px),
@@ -213,50 +274,11 @@ input {
   background-size: 28px 28px;
   border: 1px solid #d6e0e9;
   border-radius: 6px;
+  cursor: crosshair;
+  display: block;
   height: 100%;
-  min-height: 420px;
-  position: relative;
-}
-
-.shape {
-  position: absolute;
-}
-
-.rectangle {
-  border: 3px solid #176b87;
-  height: 104px;
-  left: 12%;
-  top: 18%;
-  width: 180px;
-}
-
-.line {
-  background: #d94f30;
-  height: 4px;
-  left: 34%;
-  top: 48%;
-  transform: rotate(-16deg);
-  width: 210px;
-}
-
-.circle {
-  border: 3px solid #5b7c2a;
-  border-radius: 50%;
-  height: 116px;
-  right: 12%;
-  top: 30%;
-  width: 116px;
-}
-
-.label-chip {
-  background: #102235;
-  border-radius: 6px;
-  bottom: 18px;
-  color: #ffffff;
-  font-size: 0.82rem;
-  left: 18px;
-  padding: 8px 10px;
-  position: absolute;
+  touch-action: none;
+  width: 100%;
 }
 
 .code-editor {
@@ -369,5 +391,14 @@ input {
 
   .room-summary {
     justify-content: center;
+  }
+
+  .whiteboard-controls {
+    justify-content: space-between;
+  }
+
+  .control-range input[type='range'] {
+    flex: 1;
+    width: auto;
   }
 }
