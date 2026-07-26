@@ -16,6 +16,13 @@ import './styles.css';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
+function formatActivityTime(value) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
 function App() {
   const socket = useMemo(() => io(SERVER_URL, { autoConnect: true }), []);
   const [isConnected, setIsConnected] = useState(false);
@@ -198,7 +205,10 @@ function App() {
           <h2>Activity</h2>
           <div className="activity-list">
             {activity.map((item) => (
-              <p key={item.id}>{item.message}</p>
+              <p key={item.id}>
+                <span>{formatActivityTime(item.at)}</span>
+                {item.message}
+              </p>
             ))}
           </div>
         </section>

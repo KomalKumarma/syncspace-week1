@@ -362,6 +362,17 @@ input {
   font-size: 0.86rem;
 }
 
+.activity-list p {
+  display: grid;
+  gap: 4px;
+}
+
+.activity-list span {
+  color: #176b87;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 1fr;
