@@ -57,6 +57,7 @@ Use this quick test before every review push:
 4. Click **Join** in both tabs.
 5. Confirm the collaborator count and room activity update.
 6. Send a room chat message and confirm it appears in the other tab.
+7. Leave the room and confirm the UI returns to the no-room state.
 
 ## Project Structure
 

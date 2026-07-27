@@ -184,7 +184,7 @@ function App() {
             <input
               value={messageText}
               onChange={(event) => setMessageText(event.target.value)}
-              placeholder="Send a room note"
+              placeholder={joinedRoom ? `Send a note to ${joinedRoom}` : 'Join a room to send notes'}
               disabled={!joinedRoom}
             />
             <button type="submit" disabled={!joinedRoom || !messageText.trim()}>
