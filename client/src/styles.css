@@ -344,6 +344,15 @@ input {
   grid-template-columns: minmax(0, 1fr) 42px;
 }
 
+.room-chat-status {
+  color: #667789;
+  font-size: 0.8rem;
+}
+
+.room-chat-status.active {
+  color: #11683d;
+}
+
 .message-form button {
   padding: 0;
 }

@@ -180,6 +180,9 @@ function App() {
 
         <section>
           <h2>Room Chat</h2>
+          <p className={joinedRoom ? 'room-chat-status active' : 'room-chat-status'}>
+            {joinedRoom ? `Messages are scoped to ${joinedRoom}.` : 'Join a room to unlock chat.'}
+          </p>
           <form className="message-form" onSubmit={sendMessage}>
             <input
               value={messageText}
