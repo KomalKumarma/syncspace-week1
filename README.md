@@ -11,8 +11,10 @@ This version includes:
 - Whiteboard panel scaffold
 - Code editor panel scaffold
 - Day-wise progress tracking for review submissions
+- Week 1 completion summary
+- Week 2 starter whiteboard synchronization over Socket.io
 
-Later-week items like Yjs CRDT sync, Konva drawing tools, Monaco Editor, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
+Later-week items like full Yjs CRDT sync, Monaco Editor binding, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
 
 ## Requirements
 

@@ -154,7 +154,7 @@ function App() {
       </section>
 
       <section className="workspace">
-        <WhiteboardPanel />
+        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} />
         <CodePanel />
       </section>
 
@@ -220,12 +220,13 @@ function App() {
   );
 }
 
-function WhiteboardPanel() {
+function WhiteboardPanel({ socket, joinedRoom }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
   const isDrawingRef = useRef(false);
   const dimensionsRef = useRef({ width: 0, height: 0 });
+  const lastPointRef = useRef(null);
 
   const [color, setColor] = useState('#176b87');
   const [brushSize, setBrushSize] = useState(4);
@@ -266,6 +267,28 @@ function WhiteboardPanel() {
     return () => resizeObserver.disconnect();
   }, [resizeCanvas]);
 
+  const drawStroke = useCallback((stroke) => {
+    const context = contextRef.current;
+    if (!context || !stroke?.from || !stroke?.to) return;
+
+    context.strokeStyle = stroke.color || '#176b87';
+    context.lineWidth = stroke.brushSize || 4;
+    context.beginPath();
+    context.moveTo(stroke.from.x, stroke.from.y);
+    context.lineTo(stroke.to.x, stroke.to.y);
+    context.stroke();
+  }, []);
+
+  useEffect(() => {
+    socket.on('whiteboard-draw', drawStroke);
+    socket.on('whiteboard-clear', clearCanvas);
+
+    return () => {
+      socket.off('whiteboard-draw', drawStroke);
+      socket.off('whiteboard-clear', clearCanvas);
+    };
+  }, [drawStroke, socket]);
+
   function getPointerPosition(event) {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -283,13 +306,14 @@ function WhiteboardPanel() {
     canvas.setPointerCapture(event.pointerId);
     isDrawingRef.current = true;
 
-    const { x, y } = getPointerPosition(event);
+    const point = getPointerPosition(event);
+    lastPointRef.current = point;
     context.strokeStyle = color;
     context.lineWidth = brushSize;
     context.beginPath();
-    context.moveTo(x, y);
+    context.moveTo(point.x, point.y);
     // Draw a dot for single clicks/taps.
-    context.lineTo(x, y);
+    context.lineTo(point.x, point.y);
     context.stroke();
   }
 
@@ -298,18 +322,27 @@ function WhiteboardPanel() {
     const context = contextRef.current;
     if (!context) return;
 
-    const { x, y } = getPointerPosition(event);
-    context.strokeStyle = color;
-    context.lineWidth = brushSize;
-    context.lineTo(x, y);
-    context.stroke();
-    context.beginPath();
-    context.moveTo(x, y);
+    const nextPoint = getPointerPosition(event);
+    const previousPoint = lastPointRef.current || nextPoint;
+    const stroke = {
+      from: previousPoint,
+      to: nextPoint,
+      color,
+      brushSize
+    };
+
+    drawStroke(stroke);
+    lastPointRef.current = nextPoint;
+
+    if (joinedRoom) {
+      socket.emit('whiteboard-draw', stroke);
+    }
   }
 
   function handlePointerUp(event) {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
+    lastPointRef.current = null;
     const canvas = canvasRef.current;
     if (canvas && canvas.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
@@ -321,6 +354,14 @@ function WhiteboardPanel() {
     if (!context) return;
     const { width, height } = dimensionsRef.current;
     context.clearRect(0, 0, width, height);
+  }
+
+  function clearLocalAndRemoteCanvas() {
+    clearCanvas();
+
+    if (joinedRoom) {
+      socket.emit('whiteboard-clear');
+    }
   }
 
   return (
@@ -351,7 +392,7 @@ function WhiteboardPanel() {
             />
             <span className="control-range-value">{brushSize}px</span>
           </label>
-          <button type="button" className="clear-button" onClick={clearCanvas}>
+          <button type="button" className="clear-button" onClick={clearLocalAndRemoteCanvas}>
             <Eraser size={16} />
             Clear
           </button>
@@ -359,6 +400,11 @@ function WhiteboardPanel() {
       </div>
 
       <div className="whiteboard-stage" ref={containerRef}>
+        {joinedRoom && (
+          <div className="sync-badge">
+            Live in {joinedRoom}
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           className="whiteboard-canvas"

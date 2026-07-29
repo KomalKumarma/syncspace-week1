@@ -266,6 +266,19 @@ input {
   position: relative;
 }
 
+.sync-badge {
+  background: #102235;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  left: 26px;
+  padding: 7px 10px;
+  position: absolute;
+  top: 26px;
+  z-index: 1;
+}
+
 .whiteboard-canvas {
   background-color: #ffffff;
   background-image:

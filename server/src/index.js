@@ -116,6 +116,28 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('whiteboard-draw', (stroke) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !stroke) return;
+
+    socket.to(roomId).emit('whiteboard-draw', {
+      ...stroke,
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest'
+    });
+  });
+
+  socket.on('whiteboard-clear', () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+
+    socket.to(roomId).emit('whiteboard-clear', {
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest',
+      at: new Date().toISOString()
+    });
+  });
+
   socket.on('leave-room', () => {
     removeUserFromRooms(socket);
     socket.data.roomId = undefined;
