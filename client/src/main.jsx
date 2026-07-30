@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
+import { Layer, Line, Stage } from 'react-konva';
 import {
   Braces,
   Code2,
@@ -222,35 +223,22 @@ function App() {
 
 function WhiteboardPanel({ socket, joinedRoom }) {
   const containerRef = useRef(null);
-  const canvasRef = useRef(null);
-  const contextRef = useRef(null);
   const isDrawingRef = useRef(false);
-  const dimensionsRef = useRef({ width: 0, height: 0 });
-  const lastPointRef = useRef(null);
 
   const [color, setColor] = useState('#176b87');
   const [brushSize, setBrushSize] = useState(4);
+  const [stageSize, setStageSize] = useState({ width: 1, height: 420 });
+  const [lines, setLines] = useState([]);
 
   const resizeCanvas = useCallback(() => {
     const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
+    if (!container) return;
 
     const { width, height } = container.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    canvas.width = Math.max(1, Math.round(width * dpr));
-    canvas.height = Math.max(1, Math.round(height * dpr));
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-
-    dimensionsRef.current = { width, height };
-
-    const context = canvas.getContext('2d');
-    context.scale(dpr, dpr);
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    contextRef.current = context;
+    setStageSize({
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(420, Math.round(height))
+    });
   }, []);
 
   useEffect(() => {
@@ -267,93 +255,67 @@ function WhiteboardPanel({ socket, joinedRoom }) {
     return () => resizeObserver.disconnect();
   }, [resizeCanvas]);
 
-  const drawStroke = useCallback((stroke) => {
-    const context = contextRef.current;
-    if (!context || !stroke?.from || !stroke?.to) return;
-
-    context.strokeStyle = stroke.color || '#176b87';
-    context.lineWidth = stroke.brushSize || 4;
-    context.beginPath();
-    context.moveTo(stroke.from.x, stroke.from.y);
-    context.lineTo(stroke.to.x, stroke.to.y);
-    context.stroke();
-  }, []);
-
   useEffect(() => {
-    socket.on('whiteboard-draw', drawStroke);
+    function addRemoteLine(line) {
+      setLines((current) => [...current, line]);
+    }
+
+    socket.on('whiteboard-draw', addRemoteLine);
     socket.on('whiteboard-clear', clearCanvas);
 
     return () => {
-      socket.off('whiteboard-draw', drawStroke);
+      socket.off('whiteboard-draw', addRemoteLine);
       socket.off('whiteboard-clear', clearCanvas);
     };
-  }, [drawStroke, socket]);
-
-  function getPointerPosition(event) {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top
-    };
-  }
+  }, [socket]);
 
   function handlePointerDown(event) {
-    const canvas = canvasRef.current;
-    const context = contextRef.current;
-    if (!canvas || !context) return;
-
-    canvas.setPointerCapture(event.pointerId);
     isDrawingRef.current = true;
 
-    const point = getPointerPosition(event);
-    lastPointRef.current = point;
-    context.strokeStyle = color;
-    context.lineWidth = brushSize;
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-    // Draw a dot for single clicks/taps.
-    context.lineTo(point.x, point.y);
-    context.stroke();
-  }
-
-  function handlePointerMove(event) {
-    if (!isDrawingRef.current) return;
-    const context = contextRef.current;
-    if (!context) return;
-
-    const nextPoint = getPointerPosition(event);
-    const previousPoint = lastPointRef.current || nextPoint;
-    const stroke = {
-      from: previousPoint,
-      to: nextPoint,
+    const stage = event.target.getStage();
+    const point = stage.getPointerPosition();
+    const nextLine = {
+      id: crypto.randomUUID(),
+      points: [point.x, point.y],
       color,
       brushSize
     };
 
-    drawStroke(stroke);
-    lastPointRef.current = nextPoint;
-
-    if (joinedRoom) {
-      socket.emit('whiteboard-draw', stroke);
-    }
+    setLines((current) => [...current, nextLine]);
   }
 
-  function handlePointerUp(event) {
+  function handlePointerMove(event) {
+    if (!isDrawingRef.current) return;
+
+    const stage = event.target.getStage();
+    const point = stage.getPointerPosition();
+
+    setLines((current) => {
+      const nextLines = [...current];
+      const lastLine = { ...nextLines[nextLines.length - 1] };
+      lastLine.points = lastLine.points.concat([point.x, point.y]);
+      nextLines[nextLines.length - 1] = lastLine;
+      return nextLines;
+    });
+  }
+
+  function handlePointerUp() {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
-    lastPointRef.current = null;
-    const canvas = canvasRef.current;
-    if (canvas && canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
+
+    if (joinedRoom) {
+      setLines((current) => {
+        const lastLine = current[current.length - 1];
+        if (lastLine) {
+          socket.emit('whiteboard-draw', lastLine);
+        }
+        return current;
+      });
     }
   }
 
   function clearCanvas() {
-    const context = contextRef.current;
-    if (!context) return;
-    const { width, height } = dimensionsRef.current;
-    context.clearRect(0, 0, width, height);
+    setLines([]);
   }
 
   function clearLocalAndRemoteCanvas() {
@@ -405,15 +367,31 @@ function WhiteboardPanel({ socket, joinedRoom }) {
             Live in {joinedRoom}
           </div>
         )}
-        <canvas
-          ref={canvasRef}
+        <Stage
           className="whiteboard-canvas"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        />
+          width={stageSize.width}
+          height={stageSize.height}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+        >
+          <Layer>
+            {lines.map((line) => (
+              <Line
+                key={line.id}
+                points={line.points}
+                stroke={line.color}
+                strokeWidth={line.brushSize}
+                tension={0.45}
+                lineCap="round"
+                lineJoin="round"
+              />
+            ))}
+          </Layer>
+        </Stage>
       </div>
     </section>
   );

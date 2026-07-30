@@ -294,6 +294,10 @@ input {
   width: 100%;
 }
 
+.whiteboard-canvas canvas {
+  border-radius: 6px;
+}
+
 .code-editor {
   background: #111820;
   border: 0;
