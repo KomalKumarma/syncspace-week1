@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
-import { Layer, Line, Stage } from 'react-konva';
+import { Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
   Braces,
   Code2,
@@ -9,6 +9,9 @@ import {
   LogOut,
   LogIn,
   MessageSquare,
+  PenLine,
+  RectangleHorizontal,
+  Type,
   Users,
   Wifi,
   WifiOff
@@ -227,8 +230,11 @@ function WhiteboardPanel({ socket, joinedRoom }) {
 
   const [color, setColor] = useState('#176b87');
   const [brushSize, setBrushSize] = useState(4);
+  const [tool, setTool] = useState('pen');
   const [stageSize, setStageSize] = useState({ width: 1, height: 420 });
   const [lines, setLines] = useState([]);
+  const [rectangles, setRectangles] = useState([]);
+  const [textItems, setTextItems] = useState([]);
 
   const resizeCanvas = useCallback(() => {
     const container = containerRef.current;
@@ -260,11 +266,23 @@ function WhiteboardPanel({ socket, joinedRoom }) {
       setLines((current) => [...current, line]);
     }
 
+    function addRemoteShape(shape) {
+      if (shape.type === 'rectangle') {
+        setRectangles((current) => [...current, shape]);
+      }
+
+      if (shape.type === 'text') {
+        setTextItems((current) => [...current, shape]);
+      }
+    }
+
     socket.on('whiteboard-draw', addRemoteLine);
+    socket.on('whiteboard-shape', addRemoteShape);
     socket.on('whiteboard-clear', clearCanvas);
 
     return () => {
       socket.off('whiteboard-draw', addRemoteLine);
+      socket.off('whiteboard-shape', addRemoteShape);
       socket.off('whiteboard-clear', clearCanvas);
     };
   }, [socket]);
@@ -274,6 +292,41 @@ function WhiteboardPanel({ socket, joinedRoom }) {
 
     const stage = event.target.getStage();
     const point = stage.getPointerPosition();
+
+    if (tool === 'rectangle') {
+      const nextRectangle = {
+        id: crypto.randomUUID(),
+        type: 'rectangle',
+        x: point.x,
+        y: point.y,
+        width: 0,
+        height: 0,
+        color,
+        brushSize
+      };
+
+      setRectangles((current) => [...current, nextRectangle]);
+      return;
+    }
+
+    if (tool === 'text') {
+      const nextText = {
+        id: crypto.randomUUID(),
+        type: 'text',
+        x: point.x,
+        y: point.y,
+        text: 'Text note',
+        color
+      };
+
+      setTextItems((current) => [...current, nextText]);
+      if (joinedRoom) {
+        socket.emit('whiteboard-shape', nextText);
+      }
+      isDrawingRef.current = false;
+      return;
+    }
+
     const nextLine = {
       id: crypto.randomUUID(),
       points: [point.x, point.y],
@@ -290,6 +343,18 @@ function WhiteboardPanel({ socket, joinedRoom }) {
     const stage = event.target.getStage();
     const point = stage.getPointerPosition();
 
+    if (tool === 'rectangle') {
+      setRectangles((current) => {
+        const nextRectangles = [...current];
+        const lastRectangle = { ...nextRectangles[nextRectangles.length - 1] };
+        lastRectangle.width = point.x - lastRectangle.x;
+        lastRectangle.height = point.y - lastRectangle.y;
+        nextRectangles[nextRectangles.length - 1] = lastRectangle;
+        return nextRectangles;
+      });
+      return;
+    }
+
     setLines((current) => {
       const nextLines = [...current];
       const lastLine = { ...nextLines[nextLines.length - 1] };
@@ -304,6 +369,17 @@ function WhiteboardPanel({ socket, joinedRoom }) {
     isDrawingRef.current = false;
 
     if (joinedRoom) {
+      if (tool === 'rectangle') {
+        setRectangles((current) => {
+          const lastRectangle = current[current.length - 1];
+          if (lastRectangle) {
+            socket.emit('whiteboard-shape', lastRectangle);
+          }
+          return current;
+        });
+        return;
+      }
+
       setLines((current) => {
         const lastLine = current[current.length - 1];
         if (lastLine) {
@@ -316,6 +392,8 @@ function WhiteboardPanel({ socket, joinedRoom }) {
 
   function clearCanvas() {
     setLines([]);
+    setRectangles([]);
+    setTextItems([]);
   }
 
   function clearLocalAndRemoteCanvas() {
@@ -334,6 +412,17 @@ function WhiteboardPanel({ socket, joinedRoom }) {
           <p>Freehand canvas for Week 1</p>
         </div>
         <div className="whiteboard-controls" aria-label="Whiteboard tools">
+          <div className="tool-toggle" aria-label="Drawing mode">
+            <button className={tool === 'pen' ? 'active' : ''} type="button" onClick={() => setTool('pen')} title="Pen">
+              <PenLine size={16} />
+            </button>
+            <button className={tool === 'rectangle' ? 'active' : ''} type="button" onClick={() => setTool('rectangle')} title="Rectangle">
+              <RectangleHorizontal size={16} />
+            </button>
+            <button className={tool === 'text' ? 'active' : ''} type="button" onClick={() => setTool('text')} title="Text">
+              <Type size={16} />
+            </button>
+          </div>
           <label className="control-color" title="Brush color">
             <input
               type="color"
@@ -388,6 +477,28 @@ function WhiteboardPanel({ socket, joinedRoom }) {
                 tension={0.45}
                 lineCap="round"
                 lineJoin="round"
+              />
+            ))}
+            {rectangles.map((rectangle) => (
+              <Rect
+                key={rectangle.id}
+                x={rectangle.x}
+                y={rectangle.y}
+                width={rectangle.width}
+                height={rectangle.height}
+                stroke={rectangle.color}
+                strokeWidth={rectangle.brushSize}
+              />
+            ))}
+            {textItems.map((item) => (
+              <Text
+                key={item.id}
+                x={item.x}
+                y={item.y}
+                text={item.text}
+                fill={item.color}
+                fontSize={18}
+                fontStyle="bold"
               />
             ))}
           </Layer>

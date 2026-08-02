@@ -138,6 +138,17 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('whiteboard-shape', (shape) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !shape) return;
+
+    socket.to(roomId).emit('whiteboard-shape', {
+      ...shape,
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest'
+    });
+  });
+
   socket.on('leave-room', () => {
     removeUserFromRooms(socket);
     socket.data.roomId = undefined;
