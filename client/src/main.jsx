@@ -158,7 +158,7 @@ function App() {
       </section>
 
       <section className="workspace">
-        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} />
+        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} userName={userName} />
         <CodePanel />
       </section>
 
@@ -224,7 +224,7 @@ function App() {
   );
 }
 
-function WhiteboardPanel({ socket, joinedRoom }) {
+function WhiteboardPanel({ socket, joinedRoom, userName }) {
   const containerRef = useRef(null);
   const isDrawingRef = useRef(false);
 
@@ -235,6 +235,7 @@ function WhiteboardPanel({ socket, joinedRoom }) {
   const [lines, setLines] = useState([]);
   const [rectangles, setRectangles] = useState([]);
   const [textItems, setTextItems] = useState([]);
+  const [remoteCursors, setRemoteCursors] = useState([]);
 
   const resizeCanvas = useCallback(() => {
     const container = containerRef.current;
@@ -276,22 +277,49 @@ function WhiteboardPanel({ socket, joinedRoom }) {
       }
     }
 
+    function updateRemoteCursor(cursor) {
+      setRemoteCursors((current) => {
+        const withoutCurrentUser = current.filter((item) => item.userId !== cursor.userId);
+        return [...withoutCurrentUser, cursor];
+      });
+    }
+
+    function removeRemoteCursor({ userId }) {
+      setRemoteCursors((current) => current.filter((item) => item.userId !== userId));
+    }
+
     socket.on('whiteboard-draw', addRemoteLine);
     socket.on('whiteboard-shape', addRemoteShape);
+    socket.on('whiteboard-cursor', updateRemoteCursor);
+    socket.on('whiteboard-cursor-left', removeRemoteCursor);
     socket.on('whiteboard-clear', clearCanvas);
 
     return () => {
       socket.off('whiteboard-draw', addRemoteLine);
       socket.off('whiteboard-shape', addRemoteShape);
+      socket.off('whiteboard-cursor', updateRemoteCursor);
+      socket.off('whiteboard-cursor-left', removeRemoteCursor);
       socket.off('whiteboard-clear', clearCanvas);
     };
   }, [socket]);
+
+  function broadcastCursor(point) {
+    if (!joinedRoom || !point) return;
+
+    socket.emit('whiteboard-cursor', {
+      x: point.x,
+      y: point.y,
+      color,
+      userName
+    });
+  }
 
   function handlePointerDown(event) {
     isDrawingRef.current = true;
 
     const stage = event.target.getStage();
     const point = stage.getPointerPosition();
+    broadcastCursor(point);
 
     if (tool === 'rectangle') {
       const nextRectangle = {
@@ -342,6 +370,7 @@ function WhiteboardPanel({ socket, joinedRoom }) {
 
     const stage = event.target.getStage();
     const point = stage.getPointerPosition();
+    broadcastCursor(point);
 
     if (tool === 'rectangle') {
       setRectangles((current) => {
@@ -500,6 +529,25 @@ function WhiteboardPanel({ socket, joinedRoom }) {
                 fontSize={18}
                 fontStyle="bold"
               />
+            ))}
+            {remoteCursors.map((cursor) => (
+              <React.Fragment key={cursor.userId}>
+                <Line
+                  points={[cursor.x, cursor.y, cursor.x + 14, cursor.y + 28, cursor.x + 6, cursor.y + 24]}
+                  closed
+                  fill={cursor.color}
+                  stroke="#ffffff"
+                  strokeWidth={1}
+                />
+                <Text
+                  x={cursor.x + 16}
+                  y={cursor.y + 14}
+                  text={cursor.userName}
+                  fill="#102235"
+                  fontSize={13}
+                  fontStyle="bold"
+                />
+              </React.Fragment>
             ))}
           </Layer>
         </Stage>

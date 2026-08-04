@@ -54,6 +54,10 @@ function removeUserFromRooms(socket) {
         at: new Date().toISOString()
       });
 
+      socket.to(roomId).emit('whiteboard-cursor-left', {
+        userId: socket.id
+      });
+
       publishRoomPresence(roomId);
     }
   }
@@ -144,6 +148,17 @@ io.on('connection', (socket) => {
 
     socket.to(roomId).emit('whiteboard-shape', {
       ...shape,
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest'
+    });
+  });
+
+  socket.on('whiteboard-cursor', (cursor) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !cursor) return;
+
+    socket.to(roomId).emit('whiteboard-cursor', {
+      ...cursor,
       userId: socket.id,
       userName: socket.data.userName || 'Guest'
     });

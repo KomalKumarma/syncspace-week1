@@ -319,6 +319,10 @@ input {
   border-radius: 6px;
 }
 
+.whiteboard-canvas {
+  overflow: hidden;
+}
+
 .code-editor {
   background: #111820;
   border: 0;
