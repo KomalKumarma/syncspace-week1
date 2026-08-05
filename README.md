@@ -13,6 +13,8 @@ This version includes:
 - Day-wise progress tracking for review submissions
 - Week 1 completion summary
 - Week 2 starter whiteboard synchronization over Socket.io
+- Week 2 Konva canvas tools and cursor awareness
+- Week 3 persistence foundation
 
 Later-week items like full Yjs CRDT sync, Monaco Editor binding, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
 
