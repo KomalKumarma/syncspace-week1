@@ -15,6 +15,7 @@ This version includes:
 - Week 2 starter whiteboard synchronization over Socket.io
 - Week 2 Konva canvas tools and cursor awareness
 - Week 3 persistence foundation
+- Polished login screen and live collaboration charts
 
 Later-week items like full Yjs CRDT sync, Monaco Editor binding, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
 

@@ -3,14 +3,17 @@ import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
 import { Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
+  Activity,
+  BarChart3,
   Braces,
   Code2,
   Eraser,
-  LogOut,
   LogIn,
+  LogOut,
   MessageSquare,
   PenLine,
   RectangleHorizontal,
+  Sparkles,
   Type,
   Users,
   Wifi,
@@ -33,17 +36,25 @@ function App() {
   const [roomId, setRoomId] = useState('interview-room');
   const [joinedRoom, setJoinedRoom] = useState('');
   const [userName, setUserName] = useState(`User-${Math.floor(Math.random() * 900 + 100)}`);
+  const [role, setRole] = useState('Candidate');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [users, setUsers] = useState([]);
   const [activity, setActivity] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [messages, setMessages] = useState([]);
+  const [stats, setStats] = useState({
+    strokes: 0,
+    shapes: 0,
+    messages: 0,
+    cursorMoves: 0
+  });
 
   useEffect(() => {
     function addActivity(message) {
       setActivity((current) => [
         { id: crypto.randomUUID(), message, at: new Date().toISOString() },
         ...current
-      ].slice(0, 6));
+      ].slice(0, 8));
     }
 
     socket.on('connect', () => {
@@ -72,6 +83,19 @@ function App() {
 
     socket.on('room-message', (message) => {
       setMessages((current) => [message, ...current].slice(0, 8));
+      setStats((current) => ({ ...current, messages: current.messages + 1 }));
+    });
+
+    socket.on('whiteboard-draw', () => {
+      setStats((current) => ({ ...current, strokes: current.strokes + 1 }));
+    });
+
+    socket.on('whiteboard-shape', () => {
+      setStats((current) => ({ ...current, shapes: current.shapes + 1 }));
+    });
+
+    socket.on('whiteboard-cursor', () => {
+      setStats((current) => ({ ...current, cursorMoves: current.cursorMoves + 1 }));
     });
 
     socket.on('room-error', ({ message }) => {
@@ -85,14 +109,22 @@ function App() {
       socket.off('room-presence');
       socket.off('room-activity');
       socket.off('room-message');
+      socket.off('whiteboard-draw');
+      socket.off('whiteboard-shape');
+      socket.off('whiteboard-cursor');
       socket.off('room-error');
       socket.disconnect();
     };
   }, [socket]);
 
+  function login(event) {
+    event.preventDefault();
+    setIsLoggedIn(true);
+  }
+
   function joinRoom(event) {
     event.preventDefault();
-    socket.emit('join-room', { roomId, userName });
+    socket.emit('join-room', { roomId, userName: `${userName} (${role})` });
   }
 
   function sendMessage(event) {
@@ -108,6 +140,39 @@ function App() {
     setMessages([]);
   }
 
+  if (!isLoggedIn) {
+    return (
+      <main className="login-screen">
+        <section className="login-hero">
+          <div className="brand-mark large">
+            <Braces size={34} />
+          </div>
+          <h1>SyncSpace</h1>
+          <p>Real-time whiteboard, room chat, activity tracking, and developer collaboration workspace.</p>
+          <form className="login-card" onSubmit={login}>
+            <label>
+              Display name
+              <input value={userName} onChange={(event) => setUserName(event.target.value)} />
+            </label>
+            <label>
+              Role
+              <select value={role} onChange={(event) => setRole(event.target.value)}>
+                <option>Candidate</option>
+                <option>Interviewer</option>
+                <option>Developer</option>
+                <option>Mentor</option>
+              </select>
+            </label>
+            <button type="submit">
+              <Sparkles size={18} />
+              Enter Workspace
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -117,22 +182,36 @@ function App() {
           </div>
           <div>
             <h1>SyncSpace</h1>
-            <p>Week 1 collaboration scaffold</p>
+            <p>Real-time collaboration command center</p>
           </div>
         </div>
 
-        <div className={isConnected ? 'status connected' : 'status'}>
-          {isConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
-          <span>{isConnected ? 'Connected' : 'Offline'}</span>
+        <div className="topbar-actions">
+          <div className="profile-pill">
+            <span>{userName.slice(0, 1).toUpperCase()}</span>
+            <strong>{role}</strong>
+          </div>
+          <div className={isConnected ? 'status connected' : 'status'}>
+            {isConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
+            <span>{isConnected ? 'Connected' : 'Offline'}</span>
+          </div>
         </div>
       </header>
 
+      <section className="hero-band">
+        <div>
+          <p>Live Session</p>
+          <h2>{joinedRoom || 'Ready to start a collaborative room'}</h2>
+        </div>
+        <div className="hero-metrics">
+          <Metric icon={<Users size={18} />} label="Users" value={users.length} />
+          <Metric icon={<PenLine size={18} />} label="Strokes" value={stats.strokes} />
+          <Metric icon={<MessageSquare size={18} />} label="Messages" value={stats.messages} />
+        </div>
+      </section>
+
       <section className="session-bar">
         <form onSubmit={joinRoom} className="join-form">
-          <label>
-            Name
-            <input value={userName} onChange={(event) => setUserName(event.target.value)} />
-          </label>
           <label>
             Room
             <input value={roomId} onChange={(event) => setRoomId(event.target.value)} />
@@ -158,11 +237,13 @@ function App() {
       </section>
 
       <section className="workspace">
-        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} userName={userName} />
+        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} userName={userName} onStats={setStats} />
         <CodePanel />
       </section>
 
       <aside className="collaboration-panel">
+        <LiveCharts stats={stats} users={users.length} />
+
         <section>
           <h2>Collaborators</h2>
           <div className="user-list">
@@ -224,7 +305,47 @@ function App() {
   );
 }
 
-function WhiteboardPanel({ socket, joinedRoom, userName }) {
+function Metric({ icon, label, value }) {
+  return (
+    <div className="metric">
+      {icon}
+      <div>
+        <strong>{value}</strong>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function LiveCharts({ stats, users }) {
+  const data = [
+    { label: 'Users', value: users, color: '#176b87' },
+    { label: 'Strokes', value: stats.strokes, color: '#d94f30' },
+    { label: 'Shapes', value: stats.shapes, color: '#5b7c2a' },
+    { label: 'Chat', value: stats.messages, color: '#7c4dff' },
+    { label: 'Cursors', value: stats.cursorMoves, color: '#c08a1d' }
+  ];
+  const max = Math.max(1, ...data.map((item) => item.value));
+
+  return (
+    <section>
+      <h2><BarChart3 size={17} /> Live Charts</h2>
+      <div className="chart-list">
+        {data.map((item) => (
+          <div className="chart-row" key={item.label}>
+            <span>{item.label}</span>
+            <div>
+              <i style={{ width: `${Math.max(8, (item.value / max) * 100)}%`, background: item.color }} />
+            </div>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WhiteboardPanel({ socket, joinedRoom, userName, onStats }) {
   const containerRef = useRef(null);
   const isDrawingRef = useRef(false);
 
@@ -303,6 +424,10 @@ function WhiteboardPanel({ socket, joinedRoom, userName }) {
     };
   }, [socket]);
 
+  function updateStat(key) {
+    onStats((current) => ({ ...current, [key]: current[key] + 1 }));
+  }
+
   function broadcastCursor(point) {
     if (!joinedRoom || !point) return;
 
@@ -348,6 +473,7 @@ function WhiteboardPanel({ socket, joinedRoom, userName }) {
       };
 
       setTextItems((current) => [...current, nextText]);
+      updateStat('shapes');
       if (joinedRoom) {
         socket.emit('whiteboard-shape', nextText);
       }
@@ -397,8 +523,9 @@ function WhiteboardPanel({ socket, joinedRoom, userName }) {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
-    if (joinedRoom) {
-      if (tool === 'rectangle') {
+    if (tool === 'rectangle') {
+      updateStat('shapes');
+      if (joinedRoom) {
         setRectangles((current) => {
           const lastRectangle = current[current.length - 1];
           if (lastRectangle) {
@@ -406,9 +533,12 @@ function WhiteboardPanel({ socket, joinedRoom, userName }) {
           }
           return current;
         });
-        return;
       }
+      return;
+    }
 
+    updateStat('strokes');
+    if (joinedRoom) {
       setLines((current) => {
         const lastLine = current[current.length - 1];
         if (lastLine) {
@@ -434,11 +564,11 @@ function WhiteboardPanel({ socket, joinedRoom, userName }) {
   }
 
   return (
-    <section className="pane">
+    <section className="pane whiteboard-pane">
       <div className="pane-header">
         <div>
           <h2>Whiteboard</h2>
-          <p>Freehand canvas for Week 1</p>
+          <p>Konva canvas with synced tools</p>
         </div>
         <div className="whiteboard-controls" aria-label="Whiteboard tools">
           <div className="tool-toggle" aria-label="Drawing mode">
@@ -571,7 +701,7 @@ function CodePanel() {
       <div className="pane-header">
         <div>
           <h2>Code Editor</h2>
-          <p>Editor scaffold for Week 1</p>
+          <p>Editor scaffold for Week 3 upgrade</p>
         </div>
         <div className="code-pill">
           <Code2 size={17} />

@@ -17,6 +17,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -36,22 +37,74 @@ button:disabled {
   opacity: 0.55;
 }
 
+.login-screen {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(16, 34, 53, 0.92), rgba(23, 107, 135, 0.86)),
+    radial-gradient(circle at 20% 20%, #d94f30, transparent 28%),
+    radial-gradient(circle at 80% 70%, #5b7c2a, transparent 28%);
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-hero {
+  color: #ffffff;
+  display: grid;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: 560px;
+  width: 100%;
+}
+
+.login-hero h1 {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.login-hero p {
+  color: #dce8ef;
+  font-size: 1.05rem;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  color: #17202a;
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.login-card button,
+.join-form button,
+.message-form button,
+.leave-button {
+  background: #176b87;
+  color: #ffffff;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
 .app-shell {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-height: 100vh;
   padding: 18px;
 }
 
 .topbar,
+.hero-band,
 .session-bar,
 .pane,
 .collaboration-panel {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border: 1px solid #d9e2ea;
   border-radius: 8px;
+  box-shadow: 0 14px 42px rgba(16, 34, 53, 0.07);
 }
 
 .topbar {
@@ -62,7 +115,9 @@ button:disabled {
   padding: 14px 16px;
 }
 
-.brand {
+.brand,
+.topbar-actions,
+.profile-pill {
   align-items: center;
   display: flex;
   gap: 12px;
@@ -79,6 +134,29 @@ button:disabled {
   width: 44px;
 }
 
+.brand-mark.large {
+  height: 64px;
+  width: 64px;
+}
+
+.profile-pill {
+  background: #edf1f5;
+  border-radius: 999px;
+  padding: 6px 10px 6px 6px;
+}
+
+.profile-pill span {
+  align-items: center;
+  background: #d94f30;
+  border-radius: 50%;
+  color: #ffffff;
+  display: grid;
+  font-weight: 800;
+  height: 30px;
+  place-items: center;
+  width: 30px;
+}
+
 h1,
 h2,
 p {
@@ -91,7 +169,10 @@ h1 {
 }
 
 h2 {
+  align-items: center;
+  display: flex;
   font-size: 0.96rem;
+  gap: 8px;
 }
 
 .brand p,
@@ -119,6 +200,58 @@ h2 {
   color: #11683d;
 }
 
+.hero-band {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(16, 34, 53, 0.96), rgba(23, 107, 135, 0.9)),
+    linear-gradient(90deg, #102235, #176b87);
+  color: #ffffff;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.hero-band p {
+  color: #b8d9e4;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.hero-band h2 {
+  font-size: 1.35rem;
+  margin-top: 4px;
+}
+
+.hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.metric {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  min-width: 118px;
+  padding: 10px;
+}
+
+.metric strong {
+  display: block;
+  font-size: 1.15rem;
+}
+
+.metric span {
+  color: #dce8ef;
+  font-size: 0.78rem;
+}
+
 .session-bar {
   align-items: end;
   display: flex;
@@ -142,22 +275,14 @@ label {
   gap: 6px;
 }
 
-input {
+input,
+select {
   background: #f8fafc;
   border: 1px solid #cad5df;
   border-radius: 6px;
   color: #17202a;
   min-height: 40px;
   padding: 8px 10px;
-}
-
-.join-form button,
-.message-form button,
-.leave-button {
-  background: #176b87;
-  color: #ffffff;
-  min-height: 40px;
-  padding: 0 14px;
 }
 
 .leave-button {
@@ -168,7 +293,7 @@ input {
   display: grid;
   gap: 16px;
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 4;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 0;
 }
@@ -176,7 +301,7 @@ input {
 .pane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 520px;
+  min-height: 560px;
   overflow: hidden;
 }
 
@@ -189,8 +314,6 @@ input {
   justify-content: space-between;
   padding: 14px;
 }
-
-/* Whiteboard controls */
 
 .whiteboard-controls {
   align-items: center;
@@ -225,7 +348,6 @@ input {
   background: #edf1f5;
   border-radius: 8px;
   display: inline-flex;
-  gap: 0;
   height: 36px;
   overflow: hidden;
   padding: 0;
@@ -275,10 +397,6 @@ input {
   padding: 0 12px;
 }
 
-.clear-button:hover {
-  background: #e3e9ee;
-}
-
 .whiteboard-stage {
   background: #f8fafc;
   min-height: 0;
@@ -311,16 +429,13 @@ input {
   cursor: crosshair;
   display: block;
   height: 100%;
+  overflow: hidden;
   touch-action: none;
   width: 100%;
 }
 
 .whiteboard-canvas canvas {
   border-radius: 6px;
-}
-
-.whiteboard-canvas {
-  overflow: hidden;
 }
 
 .code-editor {
@@ -341,7 +456,7 @@ input {
   display: grid;
   gap: 18px;
   grid-column: 2;
-  grid-row: 3;
+  grid-row: 4;
   padding: 14px;
 }
 
@@ -350,11 +465,38 @@ input {
   gap: 10px;
 }
 
+.chart-list,
 .user-list,
 .activity-list,
 .message-list {
   display: grid;
   gap: 8px;
+}
+
+.chart-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 64px minmax(0, 1fr) 28px;
+}
+
+.chart-row span,
+.chart-row strong {
+  color: #4f5f70;
+  font-size: 0.78rem;
+}
+
+.chart-row div {
+  background: #edf1f5;
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+
+.chart-row i {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
 }
 
 .user-row {
@@ -380,12 +522,6 @@ input {
   width: 32px;
 }
 
-.message-form {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 42px;
-}
-
 .room-chat-status {
   color: #667789;
   font-size: 0.8rem;
@@ -393,6 +529,12 @@ input {
 
 .room-chat-status.active {
   color: #11683d;
+}
+
+.message-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 42px;
 }
 
 .message-form button {
@@ -442,7 +584,8 @@ input {
 
   .topbar,
   .session-bar,
-  .pane-header {
+  .pane-header,
+  .hero-band {
     align-items: stretch;
     flex-direction: column;
   }
