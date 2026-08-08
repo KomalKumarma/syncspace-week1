@@ -1,4 +1,4 @@
-# SyncSpace - Week 1 and week 2
+# SyncSpace - Week 1 and week 2 (Mid Review)
 
 Week 1 implementation for Project 1 from the PDF: **SyncSpace**, a real-time collaborative whiteboard and code editor.
 
