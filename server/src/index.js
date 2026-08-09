@@ -5,6 +5,8 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import { getSessionSnapshot, saveSessionSnapshot } from './persistence/sessionStore.js';
+import { authRouter } from './auth/authRoutes.js';
+import { roomRouter } from './rooms/roomRoutes.js';
 
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
@@ -12,6 +14,9 @@ const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
+
+app.use('/api/auth', authRouter);
+app.use('/api/rooms', roomRouter);
 
 app.get('/health', (_request, response) => {
   response.json({
@@ -37,6 +42,15 @@ app.get('/api/sessions/:roomId/snapshot', (request, response) => {
 app.post('/api/sessions/:roomId/snapshot', (request, response) => {
   const snapshot = saveSessionSnapshot(request.params.roomId, request.body);
   response.status(201).json(snapshot);
+});
+
+app.use((error, _request, response, _next) => {
+  const statusCode = error.statusCode || 500;
+
+  response.status(statusCode).json({
+    message: error.message || 'Unexpected server error.',
+    details: error.details
+  });
 });
 
 const httpServer = createServer(app);

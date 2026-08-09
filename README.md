@@ -16,8 +16,23 @@ This version includes:
 - Week 2 Konva canvas tools and cursor awareness
 - Week 3 persistence foundation
 - Polished login screen and live collaboration charts
+- Production auth and secure room API foundation
 
 Later-week items like full Yjs CRDT sync, Monaco Editor binding, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
+
+## Production API Foundation
+
+The backend now includes starter production endpoints:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/guest`
+- `GET /api/rooms`
+- `POST /api/rooms`
+- `POST /api/rooms/:roomId/join`
+- `PATCH /api/rooms/:roomId/lock`
 
 ## Requirements
 
