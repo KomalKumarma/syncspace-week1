@@ -8,6 +8,7 @@ syncspace-week1/
     src/
       auth/                 register, login, logout, refresh, guest access
       middleware/           JWT auth and role guards
+      db/                   MongoDB connection, schemas, and repositories
       persistence/          session snapshot storage
       rooms/                room create, join, lock, invite management
       security/             password hashing and token signing
@@ -32,6 +33,7 @@ syncspace-week1/
 - Room routes: create, list, join, and lock.
 - Password-protected rooms and invite-code foundation.
 - Shared error handler and async route wrapper.
+- MongoDB model foundation for users, rooms, refresh tokens, and session snapshots.
 
 ## 3. Frontend Types Added Today
 
