@@ -12,27 +12,27 @@ import { createAuthTokens, createGuestToken, verifyToken } from '../security/tok
 import { verifyPassword } from '../security/passwordService.js';
 import { HttpError } from '../shared/httpError.js';
 
-export function register(request, response) {
+export async function register(request, response) {
   const { name, email, password, role } = request.body;
 
   if (!name || !email || !password) {
     throw new HttpError(400, 'Name, email, and password are required.');
   }
 
-  if (isEmailTaken(email)) {
+  if (await isEmailTaken(email)) {
     throw new HttpError(409, 'Email is already registered.');
   }
 
-  const user = createUser({ name, email, password, role });
+  const user = await createUser({ name, email, password, role });
   response.status(201).json({
     user: publicUser(user),
     tokens: createAuthTokens(user)
   });
 }
 
-export function login(request, response) {
+export async function login(request, response) {
   const { email, password } = request.body;
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
     throw new HttpError(401, 'Invalid email or password.');
@@ -44,15 +44,15 @@ export function login(request, response) {
   });
 }
 
-export function refresh(request, response) {
+export async function refresh(request, response) {
   const { refreshToken } = request.body;
   const payload = verifyToken(refreshToken, 'refresh');
 
-  if (isRefreshTokenRevoked(payload.jti)) {
+  if (await isRefreshTokenRevoked(payload.jti)) {
     throw new HttpError(401, 'Refresh token has been revoked.');
   }
 
-  const user = findUserById(payload.sub);
+  const user = await findUserById(payload.sub);
   if (!user) {
     throw new HttpError(401, 'User no longer exists.');
   }
@@ -63,12 +63,12 @@ export function refresh(request, response) {
   });
 }
 
-export function logout(request, response) {
+export async function logout(request, response) {
   const { refreshToken } = request.body;
 
   if (refreshToken) {
     const payload = verifyToken(refreshToken, 'refresh');
-    revokeRefreshToken(payload.jti);
+    await revokeRefreshToken(payload.jti);
   }
 
   response.status(204).send();

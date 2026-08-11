@@ -1,4 +1,6 @@
 import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { isMongoConfigured } from '../db/mongoConnection.js';
+import { createMongoRoom, findMongoRoomById, listMongoRooms, saveMongoRoom } from '../db/repositories/roomRepository.js';
 
 const rooms = new Map();
 
@@ -17,7 +19,7 @@ function verifyRoomPassword(password, storedHash) {
   return original.length === attempted.length && timingSafeEqual(original, attempted);
 }
 
-export function createRoom({ name, hostUser, password }) {
+export async function createRoom({ name, hostUser, password }) {
   const room = {
     id: randomUUID(),
     name,
@@ -32,20 +34,26 @@ export function createRoom({ name, hostUser, password }) {
     }]])
   };
 
+  if (isMongoConfigured()) {
+    return (await createMongoRoom({ ...room, hostUserId: hostUser.sub })) || room;
+  }
+
   rooms.set(room.id, room);
   return room;
 }
 
-export function getRoom(roomId) {
+export async function getRoom(roomId) {
+  if (isMongoConfigured()) return findMongoRoomById(roomId);
   return rooms.get(roomId) || null;
 }
 
-export function listRooms() {
+export async function listRooms() {
+  if (isMongoConfigured()) return (await listMongoRooms()) || [];
   return Array.from(rooms.values());
 }
 
-export function joinRoom({ roomId, user, password }) {
-  const room = getRoom(roomId);
+export async function joinRoom({ roomId, user, password }) {
+  const room = await getRoom(roomId);
   if (!room) return null;
   if (room.locked && room.members.get(user.sub)?.role !== 'host') {
     return { error: 'locked' };
@@ -62,13 +70,15 @@ export function joinRoom({ roomId, user, password }) {
     });
   }
 
+  if (isMongoConfigured()) return (await saveMongoRoom(room)) || room;
   return room;
 }
 
-export function setRoomLocked(roomId, locked) {
-  const room = getRoom(roomId);
+export async function setRoomLocked(roomId, locked) {
+  const room = await getRoom(roomId);
   if (!room) return null;
   room.locked = Boolean(locked);
+  if (isMongoConfigured()) return (await saveMongoRoom(room)) || room;
   return room;
 }
 

@@ -9,9 +9,7 @@ const RefreshTokenSchema = new mongoose.Schema(
       index: true
     },
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
+      type: String
     },
     expiresAt: {
       type: Date,
@@ -26,4 +24,3 @@ const RefreshTokenSchema = new mongoose.Schema(
 
 export const RefreshTokenModel =
   mongoose.models.RefreshToken || mongoose.model('RefreshToken', RefreshTokenSchema);
-

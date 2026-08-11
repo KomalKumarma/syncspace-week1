@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 const SessionSnapshotSchema = new mongoose.Schema(
   {
     roomId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Room',
+      type: String,
       required: true,
       index: true
     },
@@ -24,8 +23,7 @@ const SessionSnapshotSchema = new mongoose.Schema(
       default: {}
     },
     createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      type: String
     }
   },
   { timestamps: true }
@@ -35,4 +33,3 @@ SessionSnapshotSchema.index({ roomId: 1, version: -1 });
 
 export const SessionSnapshotModel =
   mongoose.models.SessionSnapshot || mongoose.model('SessionSnapshot', SessionSnapshotSchema);
-

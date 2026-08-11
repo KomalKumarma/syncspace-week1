@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 const RoomMemberSchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      type: String
     },
     guestId: String,
     name: {
@@ -36,8 +35,7 @@ const RoomSchema = new mongoose.Schema(
       trim: true
     },
     hostUserId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      type: String
     },
     locked: {
       type: Boolean,
@@ -60,4 +58,3 @@ const RoomSchema = new mongoose.Schema(
 );
 
 export const RoomModel = mongoose.models.Room || mongoose.model('Room', RoomSchema);
-

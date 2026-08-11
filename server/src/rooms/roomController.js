@@ -1,27 +1,28 @@
 import { createRoom, getRoom, joinRoom, listRooms, serializeRoom, setRoomLocked } from './roomStore.js';
 import { HttpError } from '../shared/httpError.js';
 
-export function createRoomController(request, response) {
+export async function createRoomController(request, response) {
   const { name, password } = request.body;
   if (!name) {
     throw new HttpError(400, 'Room name is required.');
   }
 
-  const room = createRoom({ name, password, hostUser: request.user });
+  const room = await createRoom({ name, password, hostUser: request.user });
   response.status(201).json({
     room: serializeRoom(room),
     inviteLink: `/rooms/join/${room.inviteCode}`
   });
 }
 
-export function listRoomsController(_request, response) {
+export async function listRoomsController(_request, response) {
+  const rooms = await listRooms();
   response.json({
-    rooms: listRooms().map(serializeRoom)
+    rooms: rooms.map(serializeRoom)
   });
 }
 
-export function joinRoomController(request, response) {
-  const result = joinRoom({
+export async function joinRoomController(request, response) {
+  const result = await joinRoom({
     roomId: request.params.roomId,
     user: request.user,
     password: request.body.password
@@ -42,8 +43,8 @@ export function joinRoomController(request, response) {
   response.json({ room: serializeRoom(result) });
 }
 
-export function lockRoomController(request, response) {
-  const room = getRoom(request.params.roomId);
+export async function lockRoomController(request, response) {
+  const room = await getRoom(request.params.roomId);
   if (!room) {
     throw new HttpError(404, 'Room not found.');
   }
@@ -54,7 +55,7 @@ export function lockRoomController(request, response) {
   }
 
   response.json({
-    room: serializeRoom(setRoomLocked(room.id, request.body.locked))
+    room: serializeRoom(await setRoomLocked(room.id, request.body.locked))
   });
 }
 
