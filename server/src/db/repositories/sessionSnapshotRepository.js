@@ -18,7 +18,7 @@ export async function saveMongoSessionSnapshot({
 
   return SessionSnapshotModel.create({
     roomId,
-    version,
+    version: version || (await getNextSnapshotVersion(roomId)),
     yjsStateVector,
     yjsUpdateBlob,
     canvasObjects,
@@ -37,3 +37,20 @@ export async function findLatestMongoSessionSnapshot(roomId) {
   return SessionSnapshotModel.findOne({ roomId }).sort({ version: -1 }).lean();
 }
 
+export async function listMongoSessionSnapshots(roomId, limit = 20) {
+  if (!isMongoConfigured()) {
+    return [];
+  }
+
+  await connectMongo();
+
+  return SessionSnapshotModel.find({ roomId })
+    .sort({ version: -1 })
+    .limit(Math.min(Number(limit) || 20, 50))
+    .lean();
+}
+
+async function getNextSnapshotVersion(roomId) {
+  const latestSnapshot = await SessionSnapshotModel.findOne({ roomId }).sort({ version: -1 }).lean();
+  return (latestSnapshot?.version || 0) + 1;
+}
