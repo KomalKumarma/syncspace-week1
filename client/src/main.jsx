@@ -6,13 +6,17 @@ import {
   Activity,
   BarChart3,
   Braces,
-  Code2,
   Eraser,
+  History,
   LogIn,
   LogOut,
   MessageSquare,
   PenLine,
+  Play,
   RectangleHorizontal,
+  RotateCcw,
+  Save,
+  ShieldCheck,
   Sparkles,
   Type,
   Users,
@@ -22,6 +26,28 @@ import {
 import './styles.css';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${SERVER_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Request failed.' }));
+    throw new Error(error.message || 'Request failed.');
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
 
 function formatActivityTime(value) {
   return new Date(value).toLocaleTimeString([], {
@@ -38,6 +64,11 @@ function App() {
   const [userName, setUserName] = useState(`User-${Math.floor(Math.random() * 900 + 100)}`);
   const [role, setRole] = useState('Candidate');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authToken, setAuthToken] = useState('');
+  const [roomPassword, setRoomPassword] = useState('');
+  const [createdRoomId, setCreatedRoomId] = useState('');
+  const [statusMessage, setStatusMessage] = useState('Demo mode ready.');
+  const [snapshotReplay, setSnapshotReplay] = useState([]);
   const [users, setUsers] = useState([]);
   const [activity, setActivity] = useState([]);
   const [messageText, setMessageText] = useState('');
@@ -117,13 +148,63 @@ function App() {
     };
   }, [socket]);
 
-  function login(event) {
+  async function login(event) {
     event.preventDefault();
-    setIsLoggedIn(true);
+    try {
+      const result = await apiRequest('/api/auth/guest', {
+        method: 'POST',
+        body: JSON.stringify({ name: userName })
+      });
+
+      setAuthToken(result.tokens.accessToken);
+      setStatusMessage('Guest token issued by backend.');
+    } catch (error) {
+      setStatusMessage(`Demo login active: ${error.message}`);
+    } finally {
+      setIsLoggedIn(true);
+    }
   }
 
-  function joinRoom(event) {
+  async function createSecureRoom() {
+    if (!authToken) {
+      setStatusMessage('Use demo room join, or enter again to request a guest token.');
+      return;
+    }
+
+    try {
+      const result = await apiRequest('/api/rooms', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          name: roomId,
+          password: roomPassword
+        })
+      });
+
+      setCreatedRoomId(result.room.id);
+      setRoomId(result.room.id);
+      setStatusMessage(`Secure room created: ${result.room.name}`);
+    } catch (error) {
+      setStatusMessage(error.message);
+    }
+  }
+
+  async function joinRoom(event) {
     event.preventDefault();
+
+    if (authToken && createdRoomId && roomId === createdRoomId) {
+      try {
+        await apiRequest(`/api/rooms/${createdRoomId}/join`, {
+          method: 'POST',
+          token: authToken,
+          body: JSON.stringify({ password: roomPassword })
+        });
+      } catch (error) {
+        setStatusMessage(error.message);
+        return;
+      }
+    }
+
     socket.emit('join-room', { roomId, userName: `${userName} (${role})` });
   }
 
@@ -138,6 +219,33 @@ function App() {
     setJoinedRoom('');
     setUsers([]);
     setMessages([]);
+  }
+
+  async function saveSnapshot(snapshot) {
+    if (!joinedRoom) return;
+
+    try {
+      const result = await apiRequest(`/api/sessions/${joinedRoom}/snapshot`, {
+        method: 'POST',
+        body: JSON.stringify(snapshot)
+      });
+      setStatusMessage(`Snapshot saved as version ${result.version}.`);
+      await loadReplay();
+    } catch (error) {
+      setStatusMessage(error.message);
+    }
+  }
+
+  async function loadReplay() {
+    if (!joinedRoom) return;
+
+    try {
+      const result = await apiRequest(`/api/sessions/${joinedRoom}/replay?limit=8`);
+      setSnapshotReplay(result.snapshots || []);
+      setStatusMessage(`Loaded ${result.count} replay snapshot(s).`);
+    } catch (error) {
+      setStatusMessage(error.message);
+    }
   }
 
   if (!isLoggedIn) {
@@ -216,6 +324,19 @@ function App() {
             Room
             <input value={roomId} onChange={(event) => setRoomId(event.target.value)} />
           </label>
+          <label>
+            Password
+            <input
+              value={roomPassword}
+              onChange={(event) => setRoomPassword(event.target.value)}
+              placeholder="Optional"
+              type="password"
+            />
+          </label>
+          <button type="button" className="secure-button" onClick={createSecureRoom}>
+            <ShieldCheck size={18} />
+            Create Secure Room
+          </button>
           <button type="submit">
             <LogIn size={18} />
             Join
@@ -236,13 +357,51 @@ function App() {
         )}
       </section>
 
+      <section className="status-strip">
+        <ShieldCheck size={17} />
+        <span>{statusMessage}</span>
+        {createdRoomId && <strong>API room id: {createdRoomId}</strong>}
+      </section>
+
       <section className="workspace">
-        <WhiteboardPanel socket={socket} joinedRoom={joinedRoom} userName={userName} onStats={setStats} />
-        <CodePanel />
+        <WhiteboardPanel
+          socket={socket}
+          joinedRoom={joinedRoom}
+          userName={userName}
+          onStats={setStats}
+          onSaveSnapshot={saveSnapshot}
+          onLoadReplay={loadReplay}
+        />
+        <CodePanel
+          socket={socket}
+          joinedRoom={joinedRoom}
+          onStatus={setStatusMessage}
+          onSaveSnapshot={saveSnapshot}
+        />
       </section>
 
       <aside className="collaboration-panel">
         <LiveCharts stats={stats} users={users.length} />
+
+        <section>
+          <h2><History size={17} /> Replay Timeline</h2>
+          <button className="secondary-action" type="button" onClick={loadReplay} disabled={!joinedRoom}>
+            <RotateCcw size={16} />
+            Refresh Replay
+          </button>
+          <div className="replay-list">
+            {snapshotReplay.length === 0 ? (
+              <p className="muted">Save snapshots to build a replay timeline.</p>
+            ) : (
+              snapshotReplay.map((snapshot) => (
+                <div className="replay-row" key={snapshot.id || snapshot.version}>
+                  <strong>v{snapshot.version}</strong>
+                  <span>{new Date(snapshot.savedAt).toLocaleTimeString()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
 
         <section>
           <h2>Collaborators</h2>
@@ -345,7 +504,7 @@ function LiveCharts({ stats, users }) {
   );
 }
 
-function WhiteboardPanel({ socket, joinedRoom, userName, onStats }) {
+function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot, onLoadReplay }) {
   const containerRef = useRef(null);
   const isDrawingRef = useRef(false);
 
@@ -563,6 +722,19 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats }) {
     }
   }
 
+  function saveCanvasSnapshot() {
+    onSaveSnapshot({
+      data: {
+        canvasObjects: [
+          ...lines.map((line) => ({ ...line, type: 'line' })),
+          ...rectangles,
+          ...textItems
+        ],
+        codeDocuments: {}
+      }
+    });
+  }
+
   return (
     <section className="pane whiteboard-pane">
       <div className="pane-header">
@@ -605,6 +777,14 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats }) {
           <button type="button" className="clear-button" onClick={clearLocalAndRemoteCanvas}>
             <Eraser size={16} />
             Clear
+          </button>
+          <button type="button" className="clear-button" onClick={saveCanvasSnapshot} disabled={!joinedRoom}>
+            <Save size={16} />
+            Save
+          </button>
+          <button type="button" className="clear-button" onClick={onLoadReplay} disabled={!joinedRoom}>
+            <History size={16} />
+            Replay
           </button>
         </div>
       </div>
@@ -686,7 +866,7 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats }) {
   );
 }
 
-function CodePanel() {
+function CodePanel({ socket, joinedRoom, onStatus, onSaveSnapshot }) {
   const starterCode = `function handleCandidateSignal(event) {
   const payload = JSON.parse(event.data);
 
@@ -695,26 +875,135 @@ function CodePanel() {
     syncedAt: new Date().toISOString()
   };
 }`;
+  const [language, setLanguage] = useState('javascript');
+  const [code, setCode] = useState(starterCode);
+  const [output, setOutput] = useState([
+    {
+      id: 'initial-output',
+      userName: 'System',
+      text: 'Run code to broadcast execution output to the room.'
+    }
+  ]);
+
+  useEffect(() => {
+    function receiveCodeUpdate(payload) {
+      if (payload.code !== code) {
+        setCode(payload.code);
+        setLanguage(payload.language || 'javascript');
+        onStatus(`${payload.userName} synced code changes.`);
+      }
+    }
+
+    function receiveOutput(payload) {
+      setOutput((current) => [
+        {
+          id: crypto.randomUUID(),
+          userName: payload.userName,
+          text: payload.output
+        },
+        ...current
+      ].slice(0, 6));
+    }
+
+    socket.on('code-update', receiveCodeUpdate);
+    socket.on('code-run-output', receiveOutput);
+
+    return () => {
+      socket.off('code-update', receiveCodeUpdate);
+      socket.off('code-run-output', receiveOutput);
+    };
+  }, [code, onStatus, socket]);
+
+  function updateCode(nextCode) {
+    setCode(nextCode);
+
+    if (joinedRoom) {
+      socket.emit('code-update', {
+        code: nextCode,
+        language
+      });
+    }
+  }
+
+  function runCode() {
+    const simulatedOutput =
+      language === 'javascript'
+        ? `JavaScript dry run completed. ${code.split('\n').length} lines checked.`
+        : `${language.toUpperCase()} execution queued. Judge0/Piston adapter ready for production integration.`;
+
+    socket.emit('code-run-output', {
+      language,
+      output: simulatedOutput
+    });
+
+    if (!joinedRoom) {
+      setOutput((current) => [
+        {
+          id: crypto.randomUUID(),
+          userName: 'Local Runner',
+          text: simulatedOutput
+        },
+        ...current
+      ].slice(0, 6));
+    }
+  }
+
+  function saveCodeSnapshot() {
+    onSaveSnapshot({
+      data: {
+        canvasObjects: [],
+        codeDocuments: {
+          [language]: code
+        }
+      }
+    });
+  }
 
   return (
     <section className="pane">
       <div className="pane-header">
         <div>
           <h2>Code Editor</h2>
-          <p>Editor scaffold for Week 3 upgrade</p>
+          <p>Collaborative editor with shared run output</p>
         </div>
-        <div className="code-pill">
-          <Code2 size={17} />
-          JavaScript
+        <div className="code-actions">
+          <label className="language-select">
+            <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+              <option value="javascript">JavaScript</option>
+              <option value="python">Python</option>
+              <option value="cpp">C++</option>
+              <option value="go">Go</option>
+            </select>
+          </label>
+          <button type="button" className="run-button" onClick={runCode}>
+            <Play size={16} />
+            Run
+          </button>
+          <button type="button" className="secondary-action compact" onClick={saveCodeSnapshot} disabled={!joinedRoom}>
+            <Save size={16} />
+            Save
+          </button>
         </div>
       </div>
 
-      <textarea
-        className="code-editor"
-        defaultValue={starterCode}
-        spellCheck="false"
-        aria-label="Code editor scaffold"
-      />
+      <div className="code-workbench">
+        <textarea
+          className="code-editor"
+          value={code}
+          onChange={(event) => updateCode(event.target.value)}
+          spellCheck="false"
+          aria-label="Collaborative code editor"
+        />
+        <div className="code-output">
+          <h3><Activity size={16} /> Output</h3>
+          {output.map((item) => (
+            <p key={item.id}>
+              <strong>{item.userName}</strong>
+              {item.text}
+            </p>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

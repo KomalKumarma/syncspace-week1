@@ -181,6 +181,30 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('code-update', (payload) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !payload) return;
+
+    socket.to(roomId).emit('code-update', {
+      ...payload,
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest',
+      syncedAt: new Date().toISOString()
+    });
+  });
+
+  socket.on('code-run-output', (payload) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !payload) return;
+
+    io.to(roomId).emit('code-run-output', {
+      ...payload,
+      userId: socket.id,
+      userName: socket.data.userName || 'Guest',
+      ranAt: new Date().toISOString()
+    });
+  });
+
   socket.on('leave-room', () => {
     removeUserFromRooms(socket);
     socket.data.roomId = undefined;

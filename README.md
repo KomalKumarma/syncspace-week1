@@ -1,15 +1,19 @@
-# SyncSpace - Week 1 and week 2 (Mid Review)
+# SyncSpace - Final Review Build
 
-Week 1 implementation for Project 1 from the PDF: **SyncSpace**, a real-time collaborative whiteboard and code editor.
+Implementation for Project 1 from the PDF: **SyncSpace**, a MERN-style real-time collaborative whiteboard and code editor.
 
 This version includes:
 
 - Express + Socket.io backend
 - Isolated collaboration rooms
 - Join/leave presence updates
-- React split-screen UI
-- Whiteboard panel scaffold
-- Code editor panel scaffold
+- React split-screen collaboration UI
+- Guest authentication with JWT access tokens
+- Secure room creation with optional password protection
+- Konva whiteboard with pen, rectangle, text, cursor presence, and clear controls
+- Snapshot save API and replay timeline API
+- Collaborative code editor demo with language selector
+- Shared code run output over Socket.io
 - Day-wise progress tracking for review submissions
 - Week 1 completion summary
 - Week 2 starter whiteboard synchronization over Socket.io
@@ -17,8 +21,7 @@ This version includes:
 - Week 3 persistence foundation
 - Polished login screen and live collaboration charts
 - Production auth and secure room API foundation
-
-Later-week items like full Yjs CRDT sync, Monaco Editor binding, MongoDB persistence, JWT access control, and replay history are intentionally not included yet.
+- MongoDB repository layer for users, refresh tokens, rooms, and session snapshots
 
 ## Production API Foundation
 
@@ -33,6 +36,20 @@ The backend now includes starter production endpoints:
 - `POST /api/rooms`
 - `POST /api/rooms/:roomId/join`
 - `PATCH /api/rooms/:roomId/lock`
+- `POST /api/sessions/:roomId/snapshot`
+- `GET /api/sessions/:roomId/snapshot`
+- `GET /api/sessions/:roomId/replay`
+
+## Real-Time Socket Features
+
+- `join-room`
+- `room-message`
+- `whiteboard-draw`
+- `whiteboard-shape`
+- `whiteboard-cursor`
+- `whiteboard-clear`
+- `code-update`
+- `code-run-output`
 
 ## Requirements
 
@@ -49,14 +66,14 @@ cd syncspace-week1
 
 Install dependencies:
 
-```bash
-npm install
+```powershell
+npm.cmd install
 ```
 
 Run the backend and frontend together:
 
-```bash
-npm run dev
+```powershell
+npm.cmd run dev
 ```
 
 Then open:
@@ -66,6 +83,12 @@ http://localhost:5173
 ```
 
 To test rooms, open the app in two browser tabs. Use the same room name in both tabs and join. You should see the connected user count and activity messages update in real time.
+
+If PowerShell says `npm.cmd` is not recognized, run this first:
+
+```powershell
+$env:Path = "C:\Users\Komalkumar M A\Downloads\node-v24.18.0-win-x64\node-v24.18.0-win-x64;" + $env:Path
+```
 
 ## Week 1 Room Test
 
@@ -77,7 +100,10 @@ Use this quick test before every review push:
 4. Click **Join** in both tabs.
 5. Confirm the collaborator count and room activity update.
 6. Send a room chat message and confirm it appears in the other tab.
-7. Leave the room and confirm the UI returns to the no-room state.
+7. Draw on the whiteboard and confirm the other tab receives the drawing.
+8. Change code in one tab and confirm the other tab receives the update.
+9. Click **Run** and confirm output appears in the room.
+10. Click **Save** on the whiteboard and refresh the replay timeline.
 
 ## Project Structure
 
