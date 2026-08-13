@@ -10,6 +10,13 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -91,10 +98,11 @@ button:disabled {
 .app-shell {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
   min-height: 100vh;
   padding: 18px;
+  width: 100%;
 }
 
 .topbar,
@@ -114,6 +122,7 @@ button:disabled {
   display: flex;
   grid-column: 1 / -1;
   justify-content: space-between;
+  min-width: 0;
   padding: 14px 16px;
 }
 
@@ -123,6 +132,7 @@ button:disabled {
   align-items: center;
   display: flex;
   gap: 12px;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -200,7 +210,9 @@ h2 {
 .code-actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
 
 .language-select select {
@@ -277,6 +289,7 @@ h2 {
   gap: 14px;
   grid-column: 1 / -1;
   justify-content: space-between;
+  min-width: 0;
   padding: 14px;
 }
 
@@ -285,6 +298,7 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
 }
 
 label {
@@ -300,8 +314,13 @@ select {
   border: 1px solid #cad5df;
   border-radius: 6px;
   color: #17202a;
+  max-width: 100%;
   min-height: 40px;
   padding: 8px 10px;
+}
+
+textarea {
+  max-width: 100%;
 }
 
 .leave-button {
@@ -334,12 +353,14 @@ select {
   grid-row: 5;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 0;
+  min-width: 0;
 }
 
 .pane {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 560px;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -350,6 +371,7 @@ select {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: space-between;
+  min-width: 0;
   padding: 14px;
 }
 
@@ -358,6 +380,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
 }
 
 .tool-toggle {
@@ -435,6 +458,19 @@ select {
   padding: 0 12px;
 }
 
+.clear-button.icon-only {
+  padding: 0;
+  width: 36px;
+}
+
+.zoom-label {
+  color: #4f5f70;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: center;
+}
+
 .whiteboard-stage {
   background: #f8fafc;
   min-height: 0;
@@ -494,6 +530,7 @@ select {
   resize: none;
   tab-size: 2;
   width: 100%;
+  max-width: 100%;
 }
 
 .code-output {
@@ -536,12 +573,59 @@ select {
   gap: 18px;
   grid-column: 2;
   grid-row: 5;
+  min-width: 0;
   padding: 14px;
 }
 
 .collaboration-panel section {
   display: grid;
   gap: 10px;
+}
+
+.ai-panel {
+  background: #f8fafc;
+  border: 1px solid #dfe7ee;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.ai-form {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-form textarea {
+  background: #ffffff;
+  border: 1px solid #cad5df;
+  border-radius: 6px;
+  color: #17202a;
+  min-height: 92px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.ai-form button {
+  background: #102235;
+  color: #ffffff;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.ai-answer {
+  background: #111820;
+  border-radius: 6px;
+  color: #d8e6f3;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
 }
 
 .chart-list,
@@ -568,9 +652,16 @@ select {
   background: #f8fafc;
   border: 1px solid #dfe7ee;
   border-radius: 6px;
+  color: inherit;
   display: flex;
   justify-content: space-between;
   padding: 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.replay-row:hover {
+  border-color: #176b87;
 }
 
 .replay-row strong {
@@ -662,6 +753,7 @@ select {
 .activity-list p {
   color: #4f5f70;
   font-size: 0.86rem;
+  overflow-wrap: anywhere;
 }
 
 .activity-list p {
@@ -705,6 +797,20 @@ select {
 
   .room-summary {
     justify-content: center;
+  }
+
+  .topbar-actions,
+  .hero-metrics,
+  .join-form,
+  .code-actions {
+    width: 100%;
+  }
+
+  .join-form label,
+  .join-form button,
+  .leave-button,
+  .secure-button {
+    width: 100%;
   }
 
   .whiteboard-controls {

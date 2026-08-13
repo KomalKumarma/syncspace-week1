@@ -5,6 +5,8 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import { authRouter } from './auth/authRoutes.js';
+import { aiRouter } from './ai/aiRoutes.js';
+import { codeRouter } from './code/codeRoutes.js';
 import { roomRouter } from './rooms/roomRoutes.js';
 import { sessionRouter } from './persistence/sessionRoutes.js';
 
@@ -16,6 +18,8 @@ app.use(cors({ origin: CLIENT_ORIGIN }));
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/code', codeRouter);
 app.use('/api/rooms', roomRouter);
 app.use('/api/sessions', sessionRouter);
 

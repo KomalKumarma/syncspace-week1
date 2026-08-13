@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { requireAuth } from '../middleware/authMiddleware.js';
 import { getSessionSnapshot, listSessionSnapshots, saveSessionSnapshot } from './sessionStore.js';
 
 export const sessionRouter = Router();
+
+sessionRouter.use(requireAuth);
 
 sessionRouter.get('/:roomId/snapshot', async (request, response, next) => {
   try {
@@ -25,7 +28,7 @@ sessionRouter.post('/:roomId/snapshot', async (request, response, next) => {
     const snapshot = await saveSessionSnapshot(
       request.params.roomId,
       request.body,
-      request.user?.userId || request.body?.createdBy
+      request.user?.sub || request.body?.createdBy
     );
 
     response.status(201).json(snapshot);

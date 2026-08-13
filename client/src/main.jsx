@@ -1,24 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
-import { Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { Arrow, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import {
   Activity,
   BarChart3,
+  Bot,
   Braces,
+  Bug,
   Eraser,
   History,
+  Minus,
   LogIn,
   LogOut,
   MessageSquare,
+  Move,
   PenLine,
+  Plus,
   Play,
+  SearchCode,
   RectangleHorizontal,
   RotateCcw,
   Save,
   ShieldCheck,
   Sparkles,
   Type,
+  Undo2,
+  Redo2,
   Users,
   Wifi,
   WifiOff
@@ -69,10 +77,12 @@ function App() {
   const [createdRoomId, setCreatedRoomId] = useState('');
   const [statusMessage, setStatusMessage] = useState('Demo mode ready.');
   const [snapshotReplay, setSnapshotReplay] = useState([]);
+  const [restoredSnapshot, setRestoredSnapshot] = useState(null);
   const [users, setUsers] = useState([]);
   const [activity, setActivity] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [messages, setMessages] = useState([]);
+  const [activeCodeContext, setActiveCodeContext] = useState('');
   const [stats, setStats] = useState({
     strokes: 0,
     shapes: 0,
@@ -227,6 +237,7 @@ function App() {
     try {
       const result = await apiRequest(`/api/sessions/${joinedRoom}/snapshot`, {
         method: 'POST',
+        token: authToken,
         body: JSON.stringify(snapshot)
       });
       setStatusMessage(`Snapshot saved as version ${result.version}.`);
@@ -240,12 +251,22 @@ function App() {
     if (!joinedRoom) return;
 
     try {
-      const result = await apiRequest(`/api/sessions/${joinedRoom}/replay?limit=8`);
+      const result = await apiRequest(`/api/sessions/${joinedRoom}/replay?limit=8`, {
+        token: authToken
+      });
       setSnapshotReplay(result.snapshots || []);
       setStatusMessage(`Loaded ${result.count} replay snapshot(s).`);
     } catch (error) {
       setStatusMessage(error.message);
     }
+  }
+
+  function restoreSnapshot(snapshot) {
+    setRestoredSnapshot({
+      ...snapshot,
+      restoredAt: Date.now()
+    });
+    setStatusMessage(`Restored checkpoint version ${snapshot.version}.`);
   }
 
   if (!isLoggedIn) {
@@ -371,12 +392,16 @@ function App() {
           onStats={setStats}
           onSaveSnapshot={saveSnapshot}
           onLoadReplay={loadReplay}
+          restoredSnapshot={restoredSnapshot}
         />
         <CodePanel
           socket={socket}
           joinedRoom={joinedRoom}
+          authToken={authToken}
           onStatus={setStatusMessage}
           onSaveSnapshot={saveSnapshot}
+          onCodeContext={setActiveCodeContext}
+          restoredSnapshot={restoredSnapshot}
         />
       </section>
 
@@ -394,10 +419,15 @@ function App() {
               <p className="muted">Save snapshots to build a replay timeline.</p>
             ) : (
               snapshotReplay.map((snapshot) => (
-                <div className="replay-row" key={snapshot.id || snapshot.version}>
+                <button
+                  className="replay-row"
+                  key={snapshot.id || snapshot.version}
+                  type="button"
+                  onClick={() => restoreSnapshot(snapshot)}
+                >
                   <strong>v{snapshot.version}</strong>
                   <span>{new Date(snapshot.savedAt).toLocaleTimeString()}</span>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -459,6 +489,13 @@ function App() {
             ))}
           </div>
         </section>
+
+        <AIAssistantPanel
+          roomId={joinedRoom}
+          authToken={authToken}
+          code={activeCodeContext}
+          onStatus={setStatusMessage}
+        />
       </aside>
     </main>
   );
@@ -504,7 +541,15 @@ function LiveCharts({ stats, users }) {
   );
 }
 
-function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot, onLoadReplay }) {
+function WhiteboardPanel({
+  socket,
+  joinedRoom,
+  userName,
+  onStats,
+  onSaveSnapshot,
+  onLoadReplay,
+  restoredSnapshot
+}) {
   const containerRef = useRef(null);
   const isDrawingRef = useRef(false);
 
@@ -512,10 +557,35 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
   const [brushSize, setBrushSize] = useState(4);
   const [tool, setTool] = useState('pen');
   const [stageSize, setStageSize] = useState({ width: 1, height: 420 });
+  const [stageScale, setStageScale] = useState(1);
+  const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [lines, setLines] = useState([]);
   const [rectangles, setRectangles] = useState([]);
+  const [arrows, setArrows] = useState([]);
   const [textItems, setTextItems] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   const [remoteCursors, setRemoteCursors] = useState([]);
+
+  function captureHistory() {
+    setHistory((current) => [
+      ...current,
+      {
+        lines,
+        rectangles,
+        arrows,
+        textItems
+      }
+    ].slice(-20));
+    setRedoStack([]);
+  }
+
+  function restoreCanvasState(snapshot) {
+    setLines(snapshot.lines || []);
+    setRectangles(snapshot.rectangles || []);
+    setArrows(snapshot.arrows || []);
+    setTextItems(snapshot.textItems || []);
+  }
 
   const resizeCanvas = useCallback(() => {
     const container = containerRef.current;
@@ -552,6 +622,10 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
         setRectangles((current) => [...current, shape]);
       }
 
+      if (shape.type === 'arrow') {
+        setArrows((current) => [...current, shape]);
+      }
+
       if (shape.type === 'text') {
         setTextItems((current) => [...current, shape]);
       }
@@ -583,6 +657,16 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
     };
   }, [socket]);
 
+  useEffect(() => {
+    const objects = restoredSnapshot?.data?.canvasObjects;
+    if (!objects) return;
+
+    setLines(objects.filter((item) => item.type === 'line'));
+    setRectangles(objects.filter((item) => item.type === 'rectangle'));
+    setArrows(objects.filter((item) => item.type === 'arrow'));
+    setTextItems(objects.filter((item) => item.type === 'text'));
+  }, [restoredSnapshot]);
+
   function updateStat(key) {
     onStats((current) => ({ ...current, [key]: current[key] + 1 }));
   }
@@ -598,12 +682,26 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
     });
   }
 
+  function getCanvasPoint(stage) {
+    const point = stage.getPointerPosition();
+    if (!point) return null;
+
+    return {
+      x: (point.x - stagePosition.x) / stageScale,
+      y: (point.y - stagePosition.y) / stageScale
+    };
+  }
+
   function handlePointerDown(event) {
+    if (tool === 'pan') return;
+
     isDrawingRef.current = true;
 
     const stage = event.target.getStage();
-    const point = stage.getPointerPosition();
+    const point = getCanvasPoint(stage);
+    if (!point) return;
     broadcastCursor(point);
+    captureHistory();
 
     if (tool === 'rectangle') {
       const nextRectangle = {
@@ -618,6 +716,19 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
       };
 
       setRectangles((current) => [...current, nextRectangle]);
+      return;
+    }
+
+    if (tool === 'arrow') {
+      const nextArrow = {
+        id: crypto.randomUUID(),
+        type: 'arrow',
+        points: [point.x, point.y, point.x, point.y],
+        color,
+        brushSize
+      };
+
+      setArrows((current) => [...current, nextArrow]);
       return;
     }
 
@@ -654,7 +765,8 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
     if (!isDrawingRef.current) return;
 
     const stage = event.target.getStage();
-    const point = stage.getPointerPosition();
+    const point = getCanvasPoint(stage);
+    if (!point) return;
     broadcastCursor(point);
 
     if (tool === 'rectangle') {
@@ -665,6 +777,17 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
         lastRectangle.height = point.y - lastRectangle.y;
         nextRectangles[nextRectangles.length - 1] = lastRectangle;
         return nextRectangles;
+      });
+      return;
+    }
+
+    if (tool === 'arrow') {
+      setArrows((current) => {
+        const nextArrows = [...current];
+        const lastArrow = { ...nextArrows[nextArrows.length - 1] };
+        lastArrow.points = [lastArrow.points[0], lastArrow.points[1], point.x, point.y];
+        nextArrows[nextArrows.length - 1] = lastArrow;
+        return nextArrows;
       });
       return;
     }
@@ -696,6 +819,20 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
       return;
     }
 
+    if (tool === 'arrow') {
+      updateStat('shapes');
+      if (joinedRoom) {
+        setArrows((current) => {
+          const lastArrow = current[current.length - 1];
+          if (lastArrow) {
+            socket.emit('whiteboard-shape', lastArrow);
+          }
+          return current;
+        });
+      }
+      return;
+    }
+
     updateStat('strokes');
     if (joinedRoom) {
       setLines((current) => {
@@ -711,15 +848,45 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
   function clearCanvas() {
     setLines([]);
     setRectangles([]);
+    setArrows([]);
     setTextItems([]);
   }
 
   function clearLocalAndRemoteCanvas() {
+    captureHistory();
     clearCanvas();
 
     if (joinedRoom) {
       socket.emit('whiteboard-clear');
     }
+  }
+
+  function undoCanvas() {
+    const previous = history[history.length - 1];
+    if (!previous) return;
+
+    setRedoStack((current) => [
+      ...current,
+      { lines, rectangles, arrows, textItems }
+    ].slice(-20));
+    setHistory((current) => current.slice(0, -1));
+    restoreCanvasState(previous);
+  }
+
+  function redoCanvas() {
+    const next = redoStack[redoStack.length - 1];
+    if (!next) return;
+
+    setHistory((current) => [
+      ...current,
+      { lines, rectangles, arrows, textItems }
+    ].slice(-20));
+    setRedoStack((current) => current.slice(0, -1));
+    restoreCanvasState(next);
+  }
+
+  function zoomCanvas(delta) {
+    setStageScale((current) => Math.min(2, Math.max(0.6, Number((current + delta).toFixed(2)))));
   }
 
   function saveCanvasSnapshot() {
@@ -728,6 +895,7 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
         canvasObjects: [
           ...lines.map((line) => ({ ...line, type: 'line' })),
           ...rectangles,
+          ...arrows,
           ...textItems
         ],
         codeDocuments: {}
@@ -750,8 +918,14 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
             <button className={tool === 'rectangle' ? 'active' : ''} type="button" onClick={() => setTool('rectangle')} title="Rectangle">
               <RectangleHorizontal size={16} />
             </button>
+            <button className={tool === 'arrow' ? 'active' : ''} type="button" onClick={() => setTool('arrow')} title="Arrow">
+              <Move size={16} />
+            </button>
             <button className={tool === 'text' ? 'active' : ''} type="button" onClick={() => setTool('text')} title="Text">
               <Type size={16} />
+            </button>
+            <button className={tool === 'pan' ? 'active' : ''} type="button" onClick={() => setTool('pan')} title="Pan">
+              <Move size={16} />
             </button>
           </div>
           <label className="control-color" title="Brush color">
@@ -778,6 +952,19 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
             <Eraser size={16} />
             Clear
           </button>
+          <button type="button" className="clear-button icon-only" onClick={undoCanvas} disabled={!history.length} title="Undo">
+            <Undo2 size={16} />
+          </button>
+          <button type="button" className="clear-button icon-only" onClick={redoCanvas} disabled={!redoStack.length} title="Redo">
+            <Redo2 size={16} />
+          </button>
+          <button type="button" className="clear-button icon-only" onClick={() => zoomCanvas(-0.1)} title="Zoom out">
+            <Minus size={16} />
+          </button>
+          <span className="zoom-label">{Math.round(stageScale * 100)}%</span>
+          <button type="button" className="clear-button icon-only" onClick={() => zoomCanvas(0.1)} title="Zoom in">
+            <Plus size={16} />
+          </button>
           <button type="button" className="clear-button" onClick={saveCanvasSnapshot} disabled={!joinedRoom}>
             <Save size={16} />
             Save
@@ -799,6 +986,12 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
           className="whiteboard-canvas"
           width={stageSize.width}
           height={stageSize.height}
+          scaleX={stageScale}
+          scaleY={stageScale}
+          x={stagePosition.x}
+          y={stagePosition.y}
+          draggable={tool === 'pan'}
+          onDragEnd={(event) => setStagePosition({ x: event.target.x(), y: event.target.y() })}
           onMouseDown={handlePointerDown}
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}
@@ -827,6 +1020,17 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
                 height={rectangle.height}
                 stroke={rectangle.color}
                 strokeWidth={rectangle.brushSize}
+              />
+            ))}
+            {arrows.map((arrow) => (
+              <Arrow
+                key={arrow.id}
+                points={arrow.points}
+                stroke={arrow.color}
+                fill={arrow.color}
+                strokeWidth={arrow.brushSize}
+                pointerLength={12}
+                pointerWidth={12}
               />
             ))}
             {textItems.map((item) => (
@@ -866,7 +1070,7 @@ function WhiteboardPanel({ socket, joinedRoom, userName, onStats, onSaveSnapshot
   );
 }
 
-function CodePanel({ socket, joinedRoom, onStatus, onSaveSnapshot }) {
+function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, onCodeContext, restoredSnapshot }) {
   const starterCode = `function handleCandidateSignal(event) {
   const payload = JSON.parse(event.data);
 
@@ -884,6 +1088,22 @@ function CodePanel({ socket, joinedRoom, onStatus, onSaveSnapshot }) {
       text: 'Run code to broadcast execution output to the room.'
     }
   ]);
+
+  useEffect(() => {
+    onCodeContext(code);
+  }, [code, onCodeContext]);
+
+  useEffect(() => {
+    const documents = restoredSnapshot?.data?.codeDocuments;
+    if (!documents) return;
+
+    const [nextLanguage, nextCode] = Object.entries(documents)[0] || [];
+    if (nextLanguage && nextCode) {
+      setLanguage(nextLanguage);
+      setCode(nextCode);
+      onStatus(`Restored ${nextLanguage} code from checkpoint.`);
+    }
+  }, [onStatus, restoredSnapshot]);
 
   useEffect(() => {
     function receiveCodeUpdate(payload) {
@@ -925,23 +1145,35 @@ function CodePanel({ socket, joinedRoom, onStatus, onSaveSnapshot }) {
     }
   }
 
-  function runCode() {
-    const simulatedOutput =
-      language === 'javascript'
-        ? `JavaScript dry run completed. ${code.split('\n').length} lines checked.`
-        : `${language.toUpperCase()} execution queued. Judge0/Piston adapter ready for production integration.`;
+  async function runCode() {
+    let executionText = '';
 
-    socket.emit('code-run-output', {
-      language,
-      output: simulatedOutput
-    });
+    try {
+      const result = await apiRequest('/api/code/run', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({ language, code })
+      });
+
+      executionText = result.run?.output || result.run?.stderr || result.message || 'Execution completed.';
+    } catch (error) {
+      executionText = error.message;
+      onStatus(error.message);
+    }
+
+    if (joinedRoom) {
+      socket.emit('code-run-output', {
+        language,
+        output: executionText
+      });
+    }
 
     if (!joinedRoom) {
       setOutput((current) => [
         {
           id: crypto.randomUUID(),
           userName: 'Local Runner',
-          text: simulatedOutput
+          text: executionText
         },
         ...current
       ].slice(0, 6));
@@ -1004,6 +1236,70 @@ function CodePanel({ socket, joinedRoom, onStatus, onSaveSnapshot }) {
           ))}
         </div>
       </div>
+    </section>
+  );
+}
+
+function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
+  const [mode, setMode] = useState('explain');
+  const [prompt, setPrompt] = useState('Explain the current code and suggest improvements.');
+  const [answer, setAnswer] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function askAssistant(event) {
+    event.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const result = await apiRequest('/api/ai/assistant', {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify({
+          mode,
+          prompt,
+          code,
+          roomId
+        })
+      });
+
+      setAnswer(result.answer);
+      onStatus('SyncSpace AI returned an answer.');
+    } catch (error) {
+      setAnswer(error.message);
+      onStatus(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <section className="ai-panel">
+      <h2><Bot size={17} /> SyncSpace AI</h2>
+      <form className="ai-form" onSubmit={askAssistant}>
+        <label>
+          Mode
+          <select value={mode} onChange={(event) => setMode(event.target.value)}>
+            <option value="explain">Explain code</option>
+            <option value="bugs">Find bugs</option>
+            <option value="optimize">Optimize</option>
+            <option value="tests">Generate tests</option>
+            <option value="error">Explain error</option>
+            <option value="architecture">Analyze architecture</option>
+            <option value="debug">Debug fix</option>
+          </select>
+        </label>
+        <textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Ask about code, bugs, errors, tests, or architecture"
+          rows="4"
+        />
+        <button type="submit" disabled={isLoading || (!prompt.trim() && !code.trim())}>
+          {mode === 'bugs' ? <Bug size={16} /> : <SearchCode size={16} />}
+          {isLoading ? 'Thinking...' : 'Ask AI'}
+        </button>
+      </form>
+      {answer && <pre className="ai-answer">{answer}</pre>}
     </section>
   );
 }
