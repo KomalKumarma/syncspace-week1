@@ -1199,6 +1199,9 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
       });
 
       executionText = result.run?.output || result.run?.stderr || result.message || 'Execution completed.';
+      if (result.source === 'local-fallback') {
+        onStatus('Code ran with local fallback because hosted execution is unavailable.');
+      }
     } catch (error) {
       executionText = error.message;
       onStatus(error.message);
@@ -1325,10 +1328,14 @@ function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          text: result.answer
+          text: result.source === 'local-fallback'
+            ? `${result.answer}\n\nSyncSpace used local fallback because the hosted AI provider is unavailable.`
+            : result.answer
         }
       ]);
-      onStatus('SyncSpace AI returned an answer.');
+      onStatus(result.source === 'local-fallback'
+        ? 'SyncSpace AI used local fallback.'
+        : 'SyncSpace AI returned an answer.');
     } catch (error) {
       setMessages((current) => [
         ...current,
