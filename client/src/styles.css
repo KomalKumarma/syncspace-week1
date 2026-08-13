@@ -834,6 +834,16 @@ textarea {
   }
 }
 
+@media (max-width: 1440px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .pane {
+    min-height: 500px;
+  }
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 1fr;

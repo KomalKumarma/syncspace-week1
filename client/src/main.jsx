@@ -35,6 +35,42 @@ import './styles.css';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
 
+const LANGUAGE_TEMPLATES = {
+  javascript: `function handleCandidateSignal(event) {
+  const payload = JSON.parse(event.data);
+
+  return {
+    roomId: payload.roomId,
+    syncedAt: new Date().toISOString()
+  };
+}`,
+  python: `import json
+from datetime import datetime
+
+def handle_candidate_signal(event_data):
+    payload = json.loads(event_data)
+    return {
+        "roomId": payload["roomId"],
+        "syncedAt": datetime.utcnow().isoformat()
+    }`,
+  cpp: `#include <iostream>
+#include <string>
+
+int main() {
+  std::string roomId = "interview-room";
+  std::cout << "Synced room: " << roomId << std::endl;
+  return 0;
+}`,
+  go: `package main
+
+import "fmt"
+
+func main() {
+  roomID := "interview-room"
+  fmt.Println("Synced room:", roomID)
+}`
+};
+
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${SERVER_URL}${path}`, {
     ...options,
@@ -1071,16 +1107,8 @@ function WhiteboardPanel({
 }
 
 function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, onCodeContext, restoredSnapshot }) {
-  const starterCode = `function handleCandidateSignal(event) {
-  const payload = JSON.parse(event.data);
-
-  return {
-    roomId: payload.roomId,
-    syncedAt: new Date().toISOString()
-  };
-}`;
   const [language, setLanguage] = useState('javascript');
-  const [code, setCode] = useState(starterCode);
+  const [code, setCode] = useState(LANGUAGE_TEMPLATES.javascript);
   const [output, setOutput] = useState([
     {
       id: 'initial-output',
@@ -1145,6 +1173,20 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
     }
   }
 
+  function changeLanguage(nextLanguage) {
+    const nextCode = LANGUAGE_TEMPLATES[nextLanguage] || '';
+    setLanguage(nextLanguage);
+    setCode(nextCode);
+    onStatus(`Switched editor to ${nextLanguage}.`);
+
+    if (joinedRoom) {
+      socket.emit('code-update', {
+        code: nextCode,
+        language: nextLanguage
+      });
+    }
+  }
+
   async function runCode() {
     let executionText = '';
 
@@ -1200,7 +1242,7 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
         </div>
         <div className="code-actions">
           <label className="language-select">
-            <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <select value={language} onChange={(event) => changeLanguage(event.target.value)}>
               <option value="javascript">JavaScript</option>
               <option value="python">Python</option>
               <option value="cpp">C++</option>
