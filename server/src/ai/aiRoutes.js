@@ -40,8 +40,12 @@ aiRouter.post('/assistant', asyncHandler(async (request, response) => {
   });
 
   if (!result.ok) {
-    const details = await result.text();
-    throw new HttpError(502, 'AI provider request failed.', details);
+    const details = await result.json().catch(async () => ({ error: { message: await result.text() } }));
+    throw new HttpError(
+      502,
+      details.error?.message || 'AI provider request failed.',
+      details
+    );
   }
 
   const data = await result.json();

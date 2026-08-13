@@ -1022,12 +1022,6 @@ function WhiteboardPanel({
           className="whiteboard-canvas"
           width={stageSize.width}
           height={stageSize.height}
-          scaleX={stageScale}
-          scaleY={stageScale}
-          x={stagePosition.x}
-          y={stagePosition.y}
-          draggable={tool === 'pan'}
-          onDragEnd={(event) => setStagePosition({ x: event.target.x(), y: event.target.y() })}
           onMouseDown={handlePointerDown}
           onMouseMove={handlePointerMove}
           onMouseUp={handlePointerUp}
@@ -1035,7 +1029,14 @@ function WhiteboardPanel({
           onTouchMove={handlePointerMove}
           onTouchEnd={handlePointerUp}
         >
-          <Layer>
+          <Layer
+            scaleX={stageScale}
+            scaleY={stageScale}
+            x={stagePosition.x}
+            y={stagePosition.y}
+            draggable={tool === 'pan'}
+            onDragEnd={(event) => setStagePosition({ x: event.target.x(), y: event.target.y() })}
+          >
             {lines.map((line) => (
               <Line
                 key={line.id}
@@ -1208,9 +1209,7 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
         language,
         output: executionText
       });
-    }
-
-    if (!joinedRoom) {
+    } else {
       setOutput((current) => [
         {
           id: crypto.randomUUID(),
