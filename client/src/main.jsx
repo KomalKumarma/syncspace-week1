@@ -1242,12 +1242,29 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
 
 function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
   const [mode, setMode] = useState('explain');
-  const [prompt, setPrompt] = useState('Explain the current code and suggest improvements.');
-  const [answer, setAnswer] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [messages, setMessages] = useState([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      text: 'Hi, I am SyncSpace AI. Ask me to explain code, find bugs, optimize, generate tests, or analyze your whiteboard architecture.'
+    }
+  ]);
   const [isLoading, setIsLoading] = useState(false);
 
   async function askAssistant(event) {
     event.preventDefault();
+    const cleanPrompt = prompt.trim();
+    if (!cleanPrompt && !code.trim()) return;
+
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      text: cleanPrompt || 'Analyze the current code context.'
+    };
+
+    setMessages((current) => [...current, userMessage]);
+    setPrompt('');
     setIsLoading(true);
 
     try {
@@ -1256,16 +1273,30 @@ function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
         token: authToken,
         body: JSON.stringify({
           mode,
-          prompt,
+          prompt: userMessage.text,
           code,
           roomId
         })
       });
 
-      setAnswer(result.answer);
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: result.answer
+        }
+      ]);
       onStatus('SyncSpace AI returned an answer.');
     } catch (error) {
-      setAnswer(error.message);
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: error.message
+        }
+      ]);
       onStatus(error.message);
     } finally {
       setIsLoading(false);
@@ -1275,6 +1306,14 @@ function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
   return (
     <section className="ai-panel">
       <h2><Bot size={17} /> SyncSpace AI</h2>
+      <div className="ai-chat-log">
+        {messages.map((message) => (
+          <div className={`ai-message ${message.role}`} key={message.id}>
+            <strong>{message.role === 'user' ? 'You' : 'SyncSpace AI'}</strong>
+            <p>{message.text}</p>
+          </div>
+        ))}
+      </div>
       <form className="ai-form" onSubmit={askAssistant}>
         <label>
           Mode
@@ -1291,15 +1330,14 @@ function AIAssistantPanel({ roomId, authToken, code, onStatus }) {
         <textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder="Ask about code, bugs, errors, tests, or architecture"
-          rows="4"
+          placeholder="Ask about code, bugs, errors, tests, or architecture..."
+          rows="3"
         />
         <button type="submit" disabled={isLoading || (!prompt.trim() && !code.trim())}>
           {mode === 'bugs' ? <Bug size={16} /> : <SearchCode size={16} />}
-          {isLoading ? 'Thinking...' : 'Ask AI'}
+          {isLoading ? 'Thinking...' : 'Send'}
         </button>
       </form>
-      {answer && <pre className="ai-answer">{answer}</pre>}
     </section>
   );
 }
