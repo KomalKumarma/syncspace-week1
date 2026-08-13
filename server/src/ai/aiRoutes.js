@@ -92,7 +92,40 @@ aiRouter.post('/assistant', asyncHandler(async (request, response) => {
 }));
 
 async function askGemini({ apiKey, prompt, code, roomId, mode }) {
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const models = getGeminiModelCandidates();
+  let lastError = '';
+
+  for (const model of models) {
+    const result = await askGeminiModel({ apiKey, model, prompt, code, roomId, mode });
+    if (result.ok) {
+      return result;
+    }
+
+    lastError = result.error;
+  }
+
+  const listedModel = await findGenerateContentModel(apiKey);
+  if (listedModel) {
+    return askGeminiModel({ apiKey, model: listedModel, prompt, code, roomId, mode });
+  }
+
+  return {
+    ok: false,
+    error: lastError || 'No Gemini generateContent model is available for this key.'
+  };
+}
+
+function getGeminiModelCandidates() {
+  return [
+    process.env.GEMINI_MODEL,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest'
+  ].filter(Boolean);
+}
+
+async function askGeminiModel({ apiKey, model, prompt, code, roomId, mode }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const systemText =
     'You are SyncSpace AI, a concise engineering assistant for collaborative whiteboard and code sessions. Help explain code, find bugs, optimize, generate tests, explain errors, and analyze architecture.';
@@ -137,6 +170,28 @@ async function askGemini({ apiKey, prompt, code, roomId, mode }) {
     ok: true,
     answer: data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim() || 'No answer returned.'
   };
+}
+
+async function findGenerateContentModel(apiKey) {
+  const result = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
+    headers: {
+      'x-goog-api-key': apiKey
+    }
+  });
+
+  if (!result.ok) {
+    return null;
+  }
+
+  const data = await result.json();
+  const model = data.models?.find((item) =>
+    item.supportedGenerationMethods?.includes('generateContent') &&
+    /flash/i.test(item.name || '')
+  ) || data.models?.find((item) =>
+    item.supportedGenerationMethods?.includes('generateContent')
+  );
+
+  return model?.name?.replace(/^models\//, '') || null;
 }
 
 function createLocalAssistantAnswer({ prompt, code, roomId, mode, reason }) {
