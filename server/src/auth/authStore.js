@@ -27,51 +27,58 @@ export async function createUser({ name, email, password, role = 'editor' }) {
     createdAt: new Date().toISOString()
   };
 
-  if (isMongoConfigured()) {
-    return createMongoUser(user);
-  }
-
   usersById.set(user.id, user);
   usersByEmail.set(normalizedEmail, user);
+
+  if (isMongoConfigured()) {
+    const mongoUser = await createMongoUser(user);
+    if (mongoUser) return mongoUser;
+  }
+
   return user;
 }
 
 export async function findUserByEmail(email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
   if (isMongoConfigured()) {
-    return findMongoUserByEmail(email);
+    const mongoUser = await findMongoUserByEmail(normalizedEmail);
+    if (mongoUser) return mongoUser;
   }
 
-  return usersByEmail.get(String(email || '').trim().toLowerCase()) || null;
+  return usersByEmail.get(normalizedEmail) || null;
 }
 
 export async function findUserById(id) {
   if (isMongoConfigured()) {
-    return findMongoUserById(id);
+    const mongoUser = await findMongoUserById(id);
+    if (mongoUser) return mongoUser;
   }
 
   return usersById.get(id) || null;
 }
 
 export async function isEmailTaken(email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
   if (isMongoConfigured()) {
-    return isMongoEmailTaken(email);
+    const taken = await isMongoEmailTaken(normalizedEmail);
+    if (taken) return true;
   }
 
-  return usersByEmail.has(String(email || '').trim().toLowerCase());
+  return usersByEmail.has(normalizedEmail);
 }
 
 export async function revokeRefreshToken(tokenId) {
-  if (isMongoConfigured()) {
-    return revokeMongoRefreshToken(tokenId);
-  }
-
   revokedRefreshTokens.add(tokenId);
+  if (isMongoConfigured()) {
+    await revokeMongoRefreshToken(tokenId);
+  }
   return true;
 }
 
 export async function isRefreshTokenRevoked(tokenId) {
   if (isMongoConfigured()) {
-    return isMongoRefreshTokenRevoked(tokenId);
+    const isRevoked = await isMongoRefreshTokenRevoked(tokenId);
+    if (isRevoked) return true;
   }
 
   return revokedRefreshTokens.has(tokenId);
@@ -89,4 +96,3 @@ export function publicUser(user) {
     createdAt: user.createdAt
   };
 }
-

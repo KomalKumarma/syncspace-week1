@@ -1,4 +1,17 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({
+  path: [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), 'server/.env'),
+    path.resolve(__dirname, '../.env'),
+    path.resolve(__dirname, '../../.env')
+  ]
+});
+
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
@@ -9,9 +22,15 @@ import { aiRouter } from './ai/aiRoutes.js';
 import { codeRouter } from './code/codeRoutes.js';
 import { roomRouter } from './rooms/roomRoutes.js';
 import { sessionRouter } from './persistence/sessionRoutes.js';
+import { connectMongo, isMongoConnected, isMongoConfigured } from './db/mongoConnection.js';
 
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+
+// Initiate async MongoDB connection check without blocking server startup
+if (isMongoConfigured()) {
+  connectMongo().catch(() => {});
+}
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN }));
@@ -27,7 +46,9 @@ app.get('/health', (_request, response) => {
   response.json({
     status: 'ok',
     service: 'syncspace-week1-server',
-    persistence: process.env.MONGODB_URI ? 'mongodb-ready' : 'memory-foundation'
+    persistence: isMongoConnected()
+      ? 'mongodb-connected'
+      : (isMongoConfigured() ? 'memory-fallback-mongo-offline' : 'memory-foundation')
   });
 });
 

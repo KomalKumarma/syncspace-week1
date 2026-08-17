@@ -34,21 +34,29 @@ export async function createRoom({ name, hostUser, password }) {
     }]])
   };
 
+  rooms.set(room.id, room);
+
   if (isMongoConfigured()) {
-    return (await createMongoRoom({ ...room, hostUserId: hostUser.sub })) || room;
+    const mongoRoom = await createMongoRoom({ ...room, hostUserId: hostUser.sub });
+    if (mongoRoom) return mongoRoom;
   }
 
-  rooms.set(room.id, room);
   return room;
 }
 
 export async function getRoom(roomId) {
-  if (isMongoConfigured()) return findMongoRoomById(roomId);
+  if (isMongoConfigured()) {
+    const mongoRoom = await findMongoRoomById(roomId);
+    if (mongoRoom) return mongoRoom;
+  }
   return rooms.get(roomId) || null;
 }
 
 export async function listRooms() {
-  if (isMongoConfigured()) return (await listMongoRooms()) || [];
+  if (isMongoConfigured()) {
+    const mongoRooms = await listMongoRooms();
+    if (mongoRooms) return mongoRooms;
+  }
   return Array.from(rooms.values());
 }
 
@@ -70,7 +78,12 @@ export async function joinRoom({ roomId, user, password }) {
     });
   }
 
-  if (isMongoConfigured()) return (await saveMongoRoom(room)) || room;
+  rooms.set(room.id, room);
+
+  if (isMongoConfigured()) {
+    const mongoRoom = await saveMongoRoom(room);
+    if (mongoRoom) return mongoRoom;
+  }
   return room;
 }
 
@@ -78,7 +91,13 @@ export async function setRoomLocked(roomId, locked) {
   const room = await getRoom(roomId);
   if (!room) return null;
   room.locked = Boolean(locked);
-  if (isMongoConfigured()) return (await saveMongoRoom(room)) || room;
+
+  rooms.set(room.id, room);
+
+  if (isMongoConfigured()) {
+    const mongoRoom = await saveMongoRoom(room);
+    if (mongoRoom) return mongoRoom;
+  }
   return room;
 }
 
@@ -93,4 +112,3 @@ export function serializeRoom(room) {
     members: Array.from(room.members.values())
   };
 }
-

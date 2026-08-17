@@ -14,9 +14,29 @@ export async function saveSessionSnapshot(roomId, snapshot, createdBy) {
     throw new Error('Room id is required.');
   }
 
+  const memoryVersion = getNextMemoryVersion(cleanRoomId);
+  const memorySnapshot = {
+    id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    roomId: cleanRoomId,
+    version: memoryVersion,
+    data: snapshot?.data || {
+      canvasObjects: snapshot?.canvasObjects || [],
+      codeDocuments: snapshot?.codeDocuments || {}
+    },
+    savedAt: new Date().toISOString(),
+    createdBy
+  };
+
+  snapshots.set(cleanRoomId, memorySnapshot);
+  if (!snapshotHistory.has(cleanRoomId)) {
+    snapshotHistory.set(cleanRoomId, []);
+  }
+  snapshotHistory.get(cleanRoomId).push(memorySnapshot);
+
   if (isMongoConfigured()) {
-    const savedSnapshot = await saveMongoSessionSnapshot({
+    const mongoSnapshot = await saveMongoSessionSnapshot({
       roomId: cleanRoomId,
+      version: memoryVersion,
       canvasObjects: snapshot?.data?.canvasObjects || snapshot?.canvasObjects || [],
       codeDocuments: snapshot?.data?.codeDocuments || snapshot?.codeDocuments || {},
       yjsStateVector: snapshot?.yjsStateVector,
@@ -24,23 +44,12 @@ export async function saveSessionSnapshot(roomId, snapshot, createdBy) {
       createdBy
     });
 
-    return formatMongoSnapshot(savedSnapshot);
+    if (mongoSnapshot) {
+      return formatMongoSnapshot(mongoSnapshot);
+    }
   }
 
-  const savedSnapshot = {
-    roomId: cleanRoomId,
-    version: getNextMemoryVersion(cleanRoomId),
-    data: snapshot?.data || {},
-    savedAt: new Date().toISOString()
-  };
-
-  snapshots.set(cleanRoomId, savedSnapshot);
-  if (!snapshotHistory.has(cleanRoomId)) {
-    snapshotHistory.set(cleanRoomId, []);
-  }
-  snapshotHistory.get(cleanRoomId).push(savedSnapshot);
-
-  return savedSnapshot;
+  return memorySnapshot;
 }
 
 export async function getSessionSnapshot(roomId) {
@@ -51,7 +60,9 @@ export async function getSessionSnapshot(roomId) {
 
   if (isMongoConfigured()) {
     const snapshot = await findLatestMongoSessionSnapshot(cleanRoomId);
-    return snapshot ? formatMongoSnapshot(snapshot) : null;
+    if (snapshot) {
+      return formatMongoSnapshot(snapshot);
+    }
   }
 
   return snapshots.get(cleanRoomId) || null;
@@ -64,8 +75,10 @@ export async function listSessionSnapshots(roomId, limit) {
   }
 
   if (isMongoConfigured()) {
-    const snapshots = await listMongoSessionSnapshots(cleanRoomId, limit);
-    return snapshots.map(formatMongoSnapshot);
+    const mongoSnapshots = await listMongoSessionSnapshots(cleanRoomId, limit);
+    if (mongoSnapshots && mongoSnapshots.length > 0) {
+      return mongoSnapshots.map(formatMongoSnapshot);
+    }
   }
 
   return [...(snapshotHistory.get(cleanRoomId) || [])].reverse().slice(0, Math.min(Number(limit) || 20, 50));

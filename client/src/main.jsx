@@ -34,6 +34,7 @@ import {
 import './styles.css';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000';
+const WHITEBOARD_HEIGHT = 460;
 
 const LANGUAGE_TEMPLATES = {
   javascript: `function handleCandidateSignal(event) {
@@ -53,6 +54,12 @@ def handle_candidate_signal(event_data):
         "roomId": payload["roomId"],
         "syncedAt": datetime.utcnow().isoformat()
     }`,
+  java: `public class Main {
+    public static void main(String[] args) {
+        String roomId = "interview-room";
+        System.out.println("Synced room: " + roomId);
+    }
+}`,
   cpp: `#include <iostream>
 #include <string>
 
@@ -70,6 +77,7 @@ func main() {
   fmt.Println("Synced room:", roomID)
 }`
 };
+
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${SERVER_URL}${path}`, {
@@ -267,43 +275,95 @@ function App() {
     setMessages([]);
   }
 
-  async function saveSnapshot(snapshot) {
-    if (!joinedRoom) return;
+  const latestCanvasRef = useRef([]);
+  const latestCodeRef = useRef({});
+  const [isPlayingReplay, setIsPlayingReplay] = useState(false);
 
+  const handleCanvasContext = useCallback((objects) => {
+    latestCanvasRef.current = objects;
+  }, []);
+
+  const handleCodeContext = useCallback((codeDocs) => {
+    latestCodeRef.current = codeDocs;
+  }, []);
+
+  const loadReplay = useCallback(async (overrideRoom) => {
+    const targetRoom = overrideRoom || joinedRoom || roomId || 'interview-room';
     try {
-      const result = await apiRequest(`/api/sessions/${joinedRoom}/snapshot`, {
-        method: 'POST',
-        token: authToken,
-        body: JSON.stringify(snapshot)
-      });
-      setStatusMessage(`Snapshot saved as version ${result.version}.`);
-      await loadReplay();
-    } catch (error) {
-      setStatusMessage(error.message);
-    }
-  }
-
-  async function loadReplay() {
-    if (!joinedRoom) return;
-
-    try {
-      const result = await apiRequest(`/api/sessions/${joinedRoom}/replay?limit=8`, {
+      const result = await apiRequest(`/api/sessions/${targetRoom}/replay?limit=15`, {
         token: authToken
       });
       setSnapshotReplay(result.snapshots || []);
-      setStatusMessage(`Loaded ${result.count} replay snapshot(s).`);
+      setStatusMessage(`Loaded ${result.count || 0} replay checkpoint(s) for ${targetRoom}.`);
     } catch (error) {
-      setStatusMessage(error.message);
+      setStatusMessage(`Replay fetch: ${error.message}`);
+    }
+  }, [authToken, joinedRoom, roomId]);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadReplay();
+    }
+  }, [isLoggedIn, loadReplay]);
+
+  async function saveSnapshot(snapshotOverride = {}) {
+    const targetRoom = joinedRoom || roomId || 'interview-room';
+
+    const canvasObjects = snapshotOverride?.data?.canvasObjects?.length
+      ? snapshotOverride.data.canvasObjects
+      : latestCanvasRef.current || [];
+
+    const codeDocuments = (snapshotOverride?.data?.codeDocuments && Object.keys(snapshotOverride.data.codeDocuments).length > 0)
+      ? snapshotOverride.data.codeDocuments
+      : latestCodeRef.current || {};
+
+    const payload = {
+      data: {
+        canvasObjects,
+        codeDocuments
+      }
+    };
+
+    try {
+      const result = await apiRequest(`/api/sessions/${targetRoom}/snapshot`, {
+        method: 'POST',
+        token: authToken,
+        body: JSON.stringify(payload)
+      });
+      setStatusMessage(`Checkpoint saved as Version v${result.version}!`);
+      await loadReplay(targetRoom);
+      return result;
+    } catch (error) {
+      setStatusMessage(`Save error: ${error.message}`);
     }
   }
 
   function restoreSnapshot(snapshot) {
+    if (!snapshot) return;
     setRestoredSnapshot({
       ...snapshot,
       restoredAt: Date.now()
     });
-    setStatusMessage(`Restored checkpoint version ${snapshot.version}.`);
+    setStatusMessage(`Restored checkpoint version v${snapshot.version}!`);
   }
+
+  async function playReplayTimeline() {
+    if (snapshotReplay.length === 0) return;
+    setIsPlayingReplay(true);
+
+    const chronologicalSnapshots = [...snapshotReplay].reverse();
+
+    for (let i = 0; i < chronologicalSnapshots.length; i++) {
+      const snap = chronologicalSnapshots[i];
+      restoreSnapshot(snap);
+      setStatusMessage(`Replaying version v${snap.version} (${i + 1}/${chronologicalSnapshots.length})...`);
+      await new Promise((res) => setTimeout(res, 1400));
+    }
+
+    setIsPlayingReplay(false);
+    setStatusMessage('Replay playback finished.');
+  }
+
 
   if (!isLoggedIn) {
     return (
@@ -428,6 +488,7 @@ function App() {
           onStats={setStats}
           onSaveSnapshot={saveSnapshot}
           onLoadReplay={loadReplay}
+          onCanvasContext={handleCanvasContext}
           restoredSnapshot={restoredSnapshot}
         />
         <CodePanel
@@ -436,7 +497,7 @@ function App() {
           authToken={authToken}
           onStatus={setStatusMessage}
           onSaveSnapshot={saveSnapshot}
-          onCodeContext={setActiveCodeContext}
+          onCodeContext={handleCodeContext}
           restoredSnapshot={restoredSnapshot}
         />
       </section>
@@ -444,30 +505,55 @@ function App() {
       <aside className="collaboration-panel">
         <LiveCharts stats={stats} users={users.length} />
 
-        <section>
+        <section className="replay-timeline-card">
           <h2><History size={17} /> Replay Timeline</h2>
-          <button className="secondary-action" type="button" onClick={loadReplay} disabled={!joinedRoom}>
-            <RotateCcw size={16} />
-            Refresh Replay
-          </button>
+          <div className="replay-header-actions">
+            <button className="secondary-action" type="button" onClick={() => loadReplay()}>
+              <RotateCcw size={15} />
+              Refresh Replay
+            </button>
+            <button
+              className="secondary-action play-btn"
+              type="button"
+              onClick={playReplayTimeline}
+              disabled={isPlayingReplay || snapshotReplay.length === 0}
+            >
+              <Play size={15} />
+              {isPlayingReplay ? 'Playing...' : 'Play All'}
+            </button>
+          </div>
           <div className="replay-list">
             {snapshotReplay.length === 0 ? (
-              <p className="muted">Save snapshots to build a replay timeline.</p>
+              <p className="muted">Click Save (💾) on the whiteboard or code editor to record checkpoints.</p>
             ) : (
-              snapshotReplay.map((snapshot) => (
-                <button
-                  className="replay-row"
-                  key={snapshot.id || snapshot.version}
-                  type="button"
-                  onClick={() => restoreSnapshot(snapshot)}
-                >
-                  <strong>v{snapshot.version}</strong>
-                  <span>{new Date(snapshot.savedAt).toLocaleTimeString()}</span>
-                </button>
-              ))
+              snapshotReplay.map((snapshot) => {
+                const shapesCount = snapshot.data?.canvasObjects?.length || 0;
+                const codeFilesCount = Object.keys(snapshot.data?.codeDocuments || {}).length;
+                const isActive = restoredSnapshot?.version === snapshot.version;
+
+                return (
+                  <button
+                    className={isActive ? 'replay-row active' : 'replay-row'}
+                    key={snapshot.id || snapshot.version}
+                    type="button"
+                    onClick={() => restoreSnapshot(snapshot)}
+                  >
+                    <div>
+                      <strong>v{snapshot.version}</strong>
+                      <span className="replay-meta">
+                        {shapesCount} shape(s) • {codeFilesCount} file(s)
+                      </span>
+                    </div>
+                    <span className="replay-time">
+                      {snapshot.savedAt ? new Date(snapshot.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
         </section>
+
 
         <section>
           <h2>Collaborators</h2>
@@ -584,6 +670,7 @@ function WhiteboardPanel({
   onStats,
   onSaveSnapshot,
   onLoadReplay,
+  onCanvasContext,
   restoredSnapshot
 }) {
   const containerRef = useRef(null);
@@ -592,7 +679,7 @@ function WhiteboardPanel({
   const [color, setColor] = useState('#176b87');
   const [brushSize, setBrushSize] = useState(4);
   const [tool, setTool] = useState('pen');
-  const [stageSize, setStageSize] = useState({ width: 1, height: 420 });
+  const [stageSize, setStageSize] = useState({ width: 1, height: WHITEBOARD_HEIGHT });
   const [stageScale, setStageScale] = useState(1);
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [lines, setLines] = useState([]);
@@ -602,6 +689,17 @@ function WhiteboardPanel({
   const [history, setHistory] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [remoteCursors, setRemoteCursors] = useState([]);
+
+  useEffect(() => {
+    const allObjects = [
+      ...lines.map((line) => ({ ...line, type: 'line' })),
+      ...rectangles,
+      ...arrows,
+      ...textItems
+    ];
+    onCanvasContext?.(allObjects);
+  }, [lines, rectangles, arrows, textItems, onCanvasContext]);
+
 
   function captureHistory() {
     setHistory((current) => [
@@ -627,10 +725,18 @@ function WhiteboardPanel({
     const container = containerRef.current;
     if (!container) return;
 
-    const { width, height } = container.getBoundingClientRect();
-    setStageSize({
-      width: Math.max(1, Math.round(width)),
-      height: Math.max(420, Math.round(height))
+    const { width } = container.getBoundingClientRect();
+    const nextWidth = Math.max(1, Math.round(width));
+
+    setStageSize((current) => {
+      if (current.width === nextWidth && current.height === WHITEBOARD_HEIGHT) {
+        return current;
+      }
+
+      return {
+        width: nextWidth,
+        height: WHITEBOARD_HEIGHT
+      };
     });
   }, []);
 
@@ -1110,13 +1216,29 @@ function WhiteboardPanel({
 function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, onCodeContext, restoredSnapshot }) {
   const [language, setLanguage] = useState('javascript');
   const [code, setCode] = useState(LANGUAGE_TEMPLATES.javascript);
+  const [activeTab, setActiveTab] = useState('output');
+  const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
+  const [isRunning, setIsRunning] = useState(false);
+  const [runnerSource, setRunnerSource] = useState('Ready');
   const [output, setOutput] = useState([
     {
       id: 'initial-output',
-      userName: 'System',
-      text: 'Run code to broadcast execution output to the room.'
+      userName: 'VS Code Runner',
+      text: 'Press Run (▶) or Ctrl+Enter to execute code in Python, Java, JavaScript, C++, or Go.'
     }
   ]);
+
+  const textareaRef = useRef(null);
+  const gutterRef = useRef(null);
+
+  const fileNames = {
+    javascript: 'index.js',
+    python: 'main.py',
+    java: 'Main.java',
+    cpp: 'main.cpp',
+    go: 'main.go'
+  };
+
 
   useEffect(() => {
     onCodeContext(code);
@@ -1151,7 +1273,7 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
           text: payload.output
         },
         ...current
-      ].slice(0, 6));
+      ].slice(0, 8));
     }
 
     socket.on('code-update', receiveCodeUpdate);
@@ -1162,6 +1284,43 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
       socket.off('code-run-output', receiveOutput);
     };
   }, [code, onStatus, socket]);
+
+  function syncScroll() {
+    if (textareaRef.current && gutterRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }
+
+  function updateCursorPos() {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const textBeforeCursor = textarea.value.substring(0, textarea.selectionStart);
+    const lines = textBeforeCursor.split('\n');
+    setCursorPos({
+      line: lines.length,
+      col: lines[lines.length - 1].length + 1
+    });
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const nextCode = code.substring(0, start) + '  ' + code.substring(end);
+      updateCode(nextCode);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+        updateCursorPos();
+      }, 0);
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      runCode();
+    }
+  }
 
   function updateCode(nextCode) {
     setCode(nextCode);
@@ -1189,7 +1348,9 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
   }
 
   async function runCode() {
+    setIsRunning(true);
     let executionText = '';
+    let sourceTag = 'Hosted Service';
 
     try {
       const result = await apiRequest('/api/code/run', {
@@ -1199,12 +1360,19 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
       });
 
       executionText = result.run?.output || result.run?.stderr || result.message || 'Execution completed.';
-      if (result.source === 'local-fallback') {
-        onStatus('Code ran with local fallback because hosted execution is unavailable.');
+      if (result.source?.startsWith('local-')) {
+        sourceTag = `Local ${result.source.replace('local-', '').toUpperCase()}`;
+        onStatus(`Code executed via ${sourceTag}.`);
+      } else {
+        onStatus(`Code executed on hosted service.`);
       }
+      setRunnerSource(sourceTag);
     } catch (error) {
       executionText = error.message;
       onStatus(error.message);
+      setRunnerSource('Error');
+    } finally {
+      setIsRunning(false);
     }
 
     if (joinedRoom) {
@@ -1216,11 +1384,11 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
       setOutput((current) => [
         {
           id: crypto.randomUUID(),
-          userName: 'Local Runner',
+          userName: sourceTag,
           text: executionText
         },
         ...current
-      ].slice(0, 6));
+      ].slice(0, 8));
     }
   }
 
@@ -1235,50 +1403,113 @@ function CodePanel({ socket, joinedRoom, authToken, onStatus, onSaveSnapshot, on
     });
   }
 
+  const lines = code.split('\n');
+
   return (
-    <section className="pane">
-      <div className="pane-header">
-        <div>
-          <h2>Code Editor</h2>
-          <p>Collaborative editor with shared run output</p>
+    <section className="pane vscode-editor-pane">
+      <div className="vscode-top-bar">
+        <div className="vscode-tabs">
+          {Object.keys(LANGUAGE_TEMPLATES).map((langKey) => (
+            <button
+              key={langKey}
+              type="button"
+              className={language === langKey ? 'vscode-tab active' : 'vscode-tab'}
+              onClick={() => changeLanguage(langKey)}
+            >
+              <span className={`file-icon ${langKey}`} />
+              <span>{fileNames[langKey]}</span>
+            </button>
+          ))}
         </div>
-        <div className="code-actions">
-          <label className="language-select">
-            <select value={language} onChange={(event) => changeLanguage(event.target.value)}>
-              <option value="javascript">JavaScript</option>
-              <option value="python">Python</option>
-              <option value="cpp">C++</option>
-              <option value="go">Go</option>
-            </select>
-          </label>
-          <button type="button" className="run-button" onClick={runCode}>
-            <Play size={16} />
-            Run
+
+        <div className="vscode-actions">
+          <button type="button" className="vscode-run-btn" onClick={runCode} disabled={isRunning}>
+            <Play size={14} fill="currentColor" />
+            <span>{isRunning ? 'Running...' : 'Run'}</span>
           </button>
-          <button type="button" className="secondary-action compact" onClick={saveCodeSnapshot} disabled={!joinedRoom}>
-            <Save size={16} />
-            Save
+          <button type="button" className="vscode-icon-btn" onClick={saveCodeSnapshot} disabled={!joinedRoom} title="Save Checkpoint">
+            <Save size={14} />
           </button>
         </div>
       </div>
 
-      <div className="code-workbench">
-        <textarea
-          className="code-editor"
-          value={code}
-          onChange={(event) => updateCode(event.target.value)}
-          spellCheck="false"
-          aria-label="Collaborative code editor"
-        />
-        <div className="code-output">
-          <h3><Activity size={16} /> Output</h3>
-          {output.map((item) => (
-            <p key={item.id}>
-              <strong>{item.userName}</strong>
-              {item.text}
-            </p>
-          ))}
+      <div className="vscode-workbench">
+        <div className="vscode-editor-container">
+          <div className="vscode-gutter" ref={gutterRef}>
+            {lines.map((_, i) => (
+              <div
+                key={i}
+                className={cursorPos.line === i + 1 ? 'vscode-line-num active' : 'vscode-line-num'}
+              >
+                {i + 1}
+              </div>
+            ))}
+          </div>
+          <textarea
+            ref={textareaRef}
+            className="vscode-textarea"
+            value={code}
+            onChange={(e) => updateCode(e.target.value)}
+            onScroll={syncScroll}
+            onClick={updateCursorPos}
+            onKeyUp={updateCursorPos}
+            onKeyDown={handleKeyDown}
+            spellCheck="false"
+            aria-label="VS Code Editor"
+          />
         </div>
+
+        <div className="vscode-panel">
+          <div className="vscode-panel-header">
+            <div className="vscode-panel-tabs">
+              <button
+                type="button"
+                className={activeTab === 'output' ? 'vscode-panel-tab active' : 'vscode-panel-tab'}
+                onClick={() => setActiveTab('output')}
+              >
+                OUTPUT
+              </button>
+              <button
+                type="button"
+                className={activeTab === 'terminal' ? 'vscode-panel-tab active' : 'vscode-panel-tab'}
+                onClick={() => setActiveTab('terminal')}
+              >
+                TERMINAL
+              </button>
+            </div>
+            <div className="vscode-panel-controls">
+              <span className="vscode-source-badge">{runnerSource}</span>
+              <button type="button" className="vscode-panel-clear" onClick={() => setOutput([])} title="Clear Output">
+                <Eraser size={13} />
+              </button>
+            </div>
+          </div>
+
+          <div className="vscode-panel-body">
+            {output.length === 0 ? (
+              <p className="vscode-output-empty">No output generated yet.</p>
+            ) : (
+              output.map((item) => (
+                <div key={item.id} className="vscode-output-line">
+                  <span className="vscode-output-user">[{item.userName}]</span>
+                  <pre className="vscode-output-text">{item.text}</pre>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <footer className="vscode-status-bar">
+          <div className="status-left">
+            <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
+            <span>Spaces: 2</span>
+            <span>UTF-8</span>
+          </div>
+          <div className="status-right">
+            <span>{language.toUpperCase()}</span>
+            <span className="status-dot green" />
+          </div>
+        </footer>
       </div>
     </section>
   );

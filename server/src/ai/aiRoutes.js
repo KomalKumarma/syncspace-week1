@@ -46,49 +46,64 @@ aiRouter.post('/assistant', asyncHandler(async (request, response) => {
     return;
   }
 
-  const result = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${openAiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are SyncSpace AI, a concise engineering assistant for collaborative whiteboard and code sessions. Help explain code, find bugs, optimize, generate tests, explain errors, and analyze architecture.'
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({ mode, roomId, prompt, code })
-        }
-      ],
-      temperature: 0.2
-    })
-  });
+  try {
+    const result = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(7000),
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are SyncSpace AI, a concise engineering assistant for collaborative whiteboard and code sessions. Help explain code, find bugs, optimize, generate tests, explain errors, and analyze architecture.'
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({ mode, roomId, prompt, code })
+          }
+        ],
+        temperature: 0.2
+      })
+    });
 
-  if (!result.ok) {
-    const details = await result.json().catch(async () => ({ error: { message: await result.text() } }));
+    if (!result.ok) {
+      const details = await result.json().catch(async () => ({ error: { message: await result.text() } }));
+      response.json({
+        answer: createLocalAssistantAnswer({
+          prompt,
+          code,
+          roomId,
+          mode,
+          reason: details.error?.message || 'AI provider request failed.'
+        }),
+        source: 'local-fallback',
+        providerError: details.error?.message || 'AI provider request failed.'
+      });
+      return;
+    }
+
+    const data = await result.json();
+    response.json({
+      answer: data.choices?.[0]?.message?.content || 'No answer returned.',
+      source: 'openai'
+    });
+  } catch (err) {
     response.json({
       answer: createLocalAssistantAnswer({
         prompt,
         code,
         roomId,
         mode,
-        reason: details.error?.message || 'AI provider request failed.'
+        reason: `AI provider connection failed: ${err.message}`
       }),
       source: 'local-fallback',
-      providerError: details.error?.message || 'AI provider request failed.'
+      providerError: err.message
     });
-    return;
   }
-
-  const data = await result.json();
-  response.json({
-    answer: data.choices?.[0]?.message?.content || 'No answer returned.',
-    source: 'openai'
-  });
 }));
 
 async function askGemini({ apiKey, prompt, code, roomId, mode }) {
@@ -130,69 +145,83 @@ async function askGeminiModel({ apiKey, model, prompt, code, roomId, mode }) {
   const systemText =
     'You are SyncSpace AI, a concise engineering assistant for collaborative whiteboard and code sessions. Help explain code, find bugs, optimize, generate tests, explain errors, and analyze architecture.';
 
-  const result = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': apiKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      system_instruction: {
-        parts: [{ text: systemText }]
+  try {
+    const result = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'Content-Type': 'application/json'
       },
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: JSON.stringify({ mode, roomId, prompt, code })
-            }
-          ]
+      signal: AbortSignal.timeout(7000),
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemText }]
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: JSON.stringify({ mode, roomId, prompt, code })
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1200
         }
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1200
-      }
-    })
-  });
+      })
+    });
 
-  if (!result.ok) {
-    const details = await result.json().catch(async () => ({ error: { message: await result.text() } }));
+    if (!result.ok) {
+      const details = await result.json().catch(async () => ({ error: { message: await result.text() } }));
+      return {
+        ok: false,
+        error: details.error?.message || 'Gemini provider request failed.'
+      };
+    }
+
+    const data = await result.json();
+    return {
+      ok: true,
+      answer: data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim() || 'No answer returned.'
+    };
+  } catch (err) {
     return {
       ok: false,
-      error: details.error?.message || 'Gemini provider request failed.'
+      error: `Gemini network request failed: ${err.message}`
     };
   }
-
-  const data = await result.json();
-  return {
-    ok: true,
-    answer: data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim() || 'No answer returned.'
-  };
 }
 
 async function findGenerateContentModel(apiKey) {
-  const result = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
-    headers: {
-      'x-goog-api-key': apiKey
-    }
-  });
+  try {
+    const result = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
+      headers: {
+        'x-goog-api-key': apiKey
+      },
+      signal: AbortSignal.timeout(7000)
+    });
 
-  if (!result.ok) {
+    if (!result.ok) {
+      return null;
+    }
+
+    const data = await result.json();
+    const model = data.models?.find((item) =>
+      item.supportedGenerationMethods?.includes('generateContent') &&
+      /flash/i.test(item.name || '')
+    ) || data.models?.find((item) =>
+      item.supportedGenerationMethods?.includes('generateContent')
+    );
+
+    return model?.name?.replace(/^models\//, '') || null;
+  } catch (err) {
     return null;
   }
-
-  const data = await result.json();
-  const model = data.models?.find((item) =>
-    item.supportedGenerationMethods?.includes('generateContent') &&
-    /flash/i.test(item.name || '')
-  ) || data.models?.find((item) =>
-    item.supportedGenerationMethods?.includes('generateContent')
-  );
-
-  return model?.name?.replace(/^models\//, '') || null;
 }
+
 
 function createLocalAssistantAnswer({ prompt, code, roomId, mode, reason }) {
   const codeLines = String(code || '').split('\n').filter(Boolean).length;
